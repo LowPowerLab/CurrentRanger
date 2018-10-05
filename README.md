@@ -1,6 +1,8 @@
 # CurrentRanger
 Precision auto-ranging current meter (ammeter)
 
+## [Please see the full guide and latest updates posted here.](https://lowpowerlab.com/guide/currentranger/)
+
 ![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2018/09/DSC_2631-768x579.jpg)
 
 ## Quick Highlights
