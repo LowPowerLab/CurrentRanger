@@ -45,3 +45,10 @@ Here are some of the features of this instrument which sets it apart:
   - Bandwidth: >300KHz (-3dB)
 
 ![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2018/09/DSC_2642.jpg)
+
+Sample no-load mA range comparison to µCurrent GOLD:
+![mA compare µCurrent](https://lowpowerlab.com/wp-content/uploads/2018/09/DS1Z_QuickPrint11_2.png)
+
+Sample measurement of a [Moteino](https://lowpowerlab.com/guide/moteino/) waking up and transmitting a  RFM69 transceiver packet:
+
+![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2018/09/CurrentRanger_LPF.gif)
