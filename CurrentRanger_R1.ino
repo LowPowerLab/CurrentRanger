@@ -118,6 +118,8 @@ void setup() {
   {
     SerialUSB.print("OLED FOUND at "); SerialUSB.println(OLED_ADDRESS);
     u8g2.begin();
+    //u8g2.setDisplayRotation(U8G2_R2); //if required (inside/custom mount?)
+    u8g2.setBusClock(1000000); //1Mhz i2C clock
     OLED_found = true;
   }
   else SerialUSB.println("NO OLED attached...");
