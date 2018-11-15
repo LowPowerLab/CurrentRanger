@@ -71,7 +71,7 @@ byte calibrationPerformed=false;
   #include <Wire.h>
   //i2c scanner: https://playground.arduino.cc/Main/I2cScanner
   #define OLED_ADDRESS  0x3C //i2c address on most small OLEDs
-  #define OLED_REFRESH_INTERVAL 100 //ms
+  #define OLED_REFRESH_INTERVAL 200 //ms
   U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
   byte OLED_found=false;
 #endif
@@ -438,7 +438,8 @@ int adcRead(byte ADCpin)
   ADC->CTRLB.reg |= ADC_CTRLB_PRESCALER_DIV64;   // divide Clock by 64
 
   //ADC->AVGCTRL.reg = ADC_AVGCTRL_SAMPLENUM_1 | ADC_AVGCTRL_ADJRES(0x00ul);  // take 1 sample, adjusting result by 0
-  ADC->AVGCTRL.reg = ADC_AVGCTRL_SAMPLENUM_16 | ADC_AVGCTRL_ADJRES(0x4ul); //take 16 samples adjust by 4
+  //ADC->AVGCTRL.reg = ADC_AVGCTRL_SAMPLENUM_16 | ADC_AVGCTRL_ADJRES(0x4ul); //take 16 samples adjust by 4
+  ADC->AVGCTRL.reg = ADC_AVGCTRL_SAMPLENUM_1024 | ADC_AVGCTRL_ADJRES(0x4ul); //take 1024 samples adjust by 4
 
   //sample timing (0 .. 0b111);
   ADC->SAMPCTRL.reg = 0b100; //0x00 fastest
