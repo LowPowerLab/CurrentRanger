@@ -44,6 +44,7 @@ uint32_t lastInteraction=0;
 #define DAC_HALF_SUPPLY_OFFSET 512
 #define OUTPUT_CALIB_FACTOR    1.00  //calibrate final VOUT value
 #define ADC_OVERLOAD           4000  //assuming DAC output is very close to 0
+#define ADC_CALIBRATE_EN
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 byte calibrationPerformed=false;
@@ -147,12 +148,12 @@ void setup() {
   //DAC->CTRLB.bit.REFSEL=0;//pick internal reference, skip SYNCDAC (done by analogWrite)
   analogWrite(A0, DAC_GND_ISO_OFFSET);  // Initialize Dac to OFFSET
 
+#ifdef ADC_CALIBRATE_EN
   adcCorrectionCheck();
   //or hardcoded:
-  //analogReadCorrection(11, 2054); //(offset, gain) - gain is 12 bit number (1 bit integer + 11bit fractional, see DS p895)
-                                    //               - offset is 12bit 2s complement format (p896)
-
-  if (OLED_found && !calibrationPerformed)
+  //analogReadCorrectionForced(0, 2048); //(offset, gain) - gain is 12 bit number (1 bit integer + 11bit fractional, see DS p895)
+                                       //               - offset is 12bit 2s complement format (p896)
+  if (OLED_found && !calibrationPerformed && MA_PRESSED)
   {
     u8g2.clearBuffer();
     SerialUSB.println("ADC calib. values:");
@@ -167,6 +168,7 @@ void setup() {
     u8g2.sendBuffer();
     delay(2000);
   }
+#endif
 
   //BT check
   Serial.begin(SERIALBAUD);
@@ -505,6 +507,12 @@ void adcCorrectionCheck() {
   {
     analogReadCorrection(offsetCorrectionValue, gainCorrectionValue);
   }
+}
+
+void analogReadCorrectionForced(int offset, uint16_t gain) {
+  offsetCorrectionValue=offset;
+  gainCorrectionValue=gain;
+  analogReadCorrection(offset,gain);
 }
 
 void calibrateADC() {
