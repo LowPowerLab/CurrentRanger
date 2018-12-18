@@ -94,6 +94,7 @@ Adafruit_FreeTouch qt[3] = {
 #define NA_NOT_PRESSED  qt[0].measure()<TOUCH_HIGH_THRESHOLD
 //***********************************************************************************************************
 #define SERIALBAUD 230400      //Serial baud for HC-06 bluetooth output
+#define BT_OUTPUT_AMPS        //ADC | AMPS | NANOS Change format of bluetooth data
 #define BT_REFRESH_INTERVAL 200 //ms
 byte BT_found=false;
 #define AUTOFF_INTERVAL 600000 //turn unit off after 10min of inactivity
@@ -252,7 +253,15 @@ void loop()
   if (BT_found && millis() - btInterval > BT_REFRESH_INTERVAL) //refresh rate (ms)
   {
     btInterval = millis();
-    Serial.println(readDiff);
+    readVOUT();
+    float VOUT = ((readDiff)/4096.0)*LDO_OUTPUT*1000*(OFFSET?1:OUTPUT_CALIB_FACTOR);
+#if defined BT_OUTPUT_ADC
+    Serial.println(readDiff,0);
+#elif defined BT_OUTPUT_AMPS
+    Serial.print(VOUT); Serial.print("E"); Serial.println(RANGE_NA ? -9 : RANGE_UA ? -6 : -3);
+#elif defined BT_OUTPUT_NANOS
+    Serial.println(VOUT * (RANGE_NA ? 1 : RANGE_UA ? 1000 : 1000000));
+#endif
   }
 
   if (OLED_found && millis() - oledInterval > OLED_REFRESH_INTERVAL) //refresh rate (ms)
@@ -336,7 +345,9 @@ void rangeMA() {
   digitalWrite(MA,HIGH);
   digitalWrite(UA,LOW);
   digitalWrite(NA,LOW);
+#ifdef BT_OUTPUT_ADC
   if (BT_found) Serial.println("RANGE: MA");
+#endif
 }
 
 void rangeUA() {
@@ -344,7 +355,9 @@ void rangeUA() {
   digitalWrite(UA,HIGH);
   digitalWrite(MA,LOW);
   digitalWrite(NA,LOW);
+#ifdef BT_OUTPUT_ADC
   if (BT_found) Serial.println("RANGE: UA");
+#endif
 }
 
 void rangeNA() {
@@ -352,7 +365,9 @@ void rangeNA() {
   digitalWrite(NA,HIGH);
   digitalWrite(MA,LOW);
   digitalWrite(UA,LOW);
+#ifdef BT_OUTPUT_ADC
   if (BT_found) Serial.println("RANGE: NA");
+#endif
 }
 
 #define AUTOFFBUZZDELAY 500
