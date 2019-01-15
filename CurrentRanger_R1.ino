@@ -7,7 +7,7 @@
 //   - ultra low burden voltage
 //   - 1mV per nA/uA/mA measurements with DMM/scope 
 //   - OLED standalone readings
-//   - bluetooth data logging options
+//   - bluetooth data logging option via 3.3v/RX/TX header
 //   - full digital control for power/switching
 //   - LiPo powered with auto power-off feature (0.6uA quiescent current)
 // *************************************************************************************************************
@@ -31,8 +31,7 @@
 char rangeUnit = 'm';
 uint32_t lastInteraction=0;
 //***********************************************************************************************************
-// CHANGE THIS TO ACTUAL LDO OUTPUT ON YOUR BOARD (MEASURE "GND-3V" ON OLED HEADER)
-#define LDO_OUTPUT             3.300 //volts
+#define LDO_OUTPUT             3.3 //volts, change to actual LDO output (measure GND-3V on OLED header)
 //***********************************************************************************************************
 #define SENSE_OUTPUT           A3
 #define SENSE_GNDISO           A2
@@ -43,11 +42,12 @@ uint32_t lastInteraction=0;
 #define DAC_GND_ISO_OFFSET     0
 #define DAC_HALF_SUPPLY_OFFSET 512
 #define OUTPUT_CALIB_FACTOR    1.00  //calibrate final VOUT value
-#define ADC_OVERLOAD           4000  //assuming DAC output is very close to 0
+#define ADC_OVERLOAD           4000  //assuming DAC output is very close to 0, this is max value less ground offset (varies from unit to unit, 4000 is a safe value)
+//***********************************************************************************************************
 #define ADC_CALIBRATE_EN
-int offsetCorrectionValue = 0;
-uint16_t gainCorrectionValue = 0;
-byte calibrationPerformed=false;
+//#define ADC_CALIBRATE_FORCED       //uncomment to set manual offset/gain values below
+#define ADC_CALIBRATE_FORCED_OFFSET 0
+#define ADC_CALIBRATE_FORCED_GAIN   2048
 //***********************************************************************************************************
 #define BUZZER     1           // BUZZER pin
 #define NOTE_C5  523
@@ -64,8 +64,8 @@ byte calibrationPerformed=false;
 #define STARTUP_MODE        MODE_MANUAL //MODE_AUTORANGE
 #define SWITCHDELAY_UP      8 //ms
 #define SWITCHDELAY_DOWN    8 //ms
-#define RANGE_SWITCH_THRESHOLD_HIGH ADC_OVERLOAD //ADC 12bit values
-#define RANGE_SWITCH_THRESHOLD_LOW  3
+#define RANGE_SWITCH_THRESHOLD_HIGH ADC_OVERLOAD //ADC's 12bit value
+#define RANGE_SWITCH_THRESHOLD_LOW  0
 //***********************************************************************************************************
 #define OLED_EN
 #ifdef OLED_EN
@@ -94,10 +94,15 @@ Adafruit_FreeTouch qt[3] = {
 #define NA_NOT_PRESSED  qt[0].measure()<TOUCH_HIGH_THRESHOLD
 //***********************************************************************************************************
 #define SERIALBAUD 230400      //Serial baud for HC-06 bluetooth output
+#define BT_OUTPUT_AMPS        //ADC | AMPS | NANOS Change format of bluetooth data
 #define BT_REFRESH_INTERVAL 200 //ms
-byte BT_found=false;
 #define AUTOFF_INTERVAL 600000 //turn unit off after 10min of inactivity
 //***********************************************************************************************************
+
+int offsetCorrectionValue = 0;
+uint16_t gainCorrectionValue = 0;
+byte calibrationPerformed=false;
+byte BT_found=false;
 
 void setup() {
   SerialUSB.begin(1); //USB hyper speed, baud wont matter
@@ -149,10 +154,15 @@ void setup() {
   analogWrite(A0, DAC_GND_ISO_OFFSET);  // Initialize Dac to OFFSET
 
 #ifdef ADC_CALIBRATE_EN
-  adcCorrectionCheck();
-  //or hardcoded:
-  //analogReadCorrectionForced(0, 2048); //(offset, gain) - gain is 12 bit number (1 bit integer + 11bit fractional, see DS p895)
-                                       //               - offset is 12bit 2s complement format (p896)
+  #ifndef ADC_CALIBRATE_FORCED
+    adcCorrectionCheck();
+  #else
+    //or hardcoded:
+    analogReadCorrectionForced(ADC_CALIBRATE_FORCED_OFFSET, ADC_CALIBRATE_FORCED_GAIN);
+      //(offset, gain) - gain is 12 bit number (1 bit integer + 11bit fractional, see DS p895)
+      //               - offset is 12bit 2s complement format (p896)
+  #endif
+
   if (OLED_found && !calibrationPerformed && MA_PRESSED)
   {
     u8g2.clearBuffer();
@@ -252,7 +262,15 @@ void loop()
   if (BT_found && millis() - btInterval > BT_REFRESH_INTERVAL) //refresh rate (ms)
   {
     btInterval = millis();
-    Serial.println(readDiff);
+    readVOUT();
+    float VOUT = ((readDiff)/4096.0)*LDO_OUTPUT*1000*(OFFSET?1:OUTPUT_CALIB_FACTOR);
+#if defined BT_OUTPUT_ADC
+    Serial.println(readDiff,0);
+#elif defined BT_OUTPUT_AMPS
+    Serial.print(VOUT); Serial.print("E"); Serial.println(RANGE_NA ? -9 : RANGE_UA ? -6 : -3);
+#elif defined BT_OUTPUT_NANOS
+    Serial.println(VOUT * (RANGE_NA ? 1 : RANGE_UA ? 1000 : 1000000));
+#endif
   }
 
   if (OLED_found && millis() - oledInterval > OLED_REFRESH_INTERVAL) //refresh rate (ms)
@@ -284,6 +302,8 @@ void loop()
       //u8g2.setFontMode(0);
       //u8g2.setDrawColor(0);
       u8g2.drawStr(0,12, "AUTO");
+      u8g2.setCursor(0,24);
+      u8g2.print(readDiff,0);
     }
     else
     {
@@ -336,7 +356,9 @@ void rangeMA() {
   digitalWrite(MA,HIGH);
   digitalWrite(UA,LOW);
   digitalWrite(NA,LOW);
+#ifdef BT_OUTPUT_ADC
   if (BT_found) Serial.println("RANGE: MA");
+#endif
 }
 
 void rangeUA() {
@@ -344,7 +366,9 @@ void rangeUA() {
   digitalWrite(UA,HIGH);
   digitalWrite(MA,LOW);
   digitalWrite(NA,LOW);
+#ifdef BT_OUTPUT_ADC
   if (BT_found) Serial.println("RANGE: UA");
+#endif
 }
 
 void rangeNA() {
@@ -352,7 +376,9 @@ void rangeNA() {
   digitalWrite(NA,HIGH);
   digitalWrite(MA,LOW);
   digitalWrite(UA,LOW);
+#ifdef BT_OUTPUT_ADC
   if (BT_found) Serial.println("RANGE: NA");
+#endif
 }
 
 #define AUTOFFBUZZDELAY 500
@@ -604,6 +630,7 @@ void calibrateADC() {
   }
 
   gainCorrectionValue = (minGain + maxGain) >> 1;
+  analogReadCorrection(offsetCorrectionValue, gainCorrectionValue);
 
   //save values to EEPROM
   eeprom_ADCoffset.write(offsetCorrectionValue);
