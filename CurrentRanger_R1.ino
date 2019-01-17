@@ -242,7 +242,8 @@ void loop()
   if (AUTORANGE)
   {
     readVOUT();
-    if (abs(readDiff) <= RANGE_SWITCH_THRESHOLD_LOW)
+    //assumes we only auto-range in DC mode (no bias)
+    if (readDiff <= RANGE_SWITCH_THRESHOLD_LOW)
     {
       if      (RANGE_MA) { rangeUA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_DOWN); }
       else if (RANGE_UA) { rangeNA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_DOWN); }
@@ -317,7 +318,7 @@ void loop()
     u8g2.setCursor(106,64); u8g2.print('A');
     u8g2.setCursor(rangeUnit=='m'?102:106,38); u8g2.print(rangeUnit=='u'?char('µ'):rangeUnit);
     u8g2.setFont(u8g2_font_logisoso32_tr);
-    u8g2.setCursor(0,64); u8g2.print((OFFSET&&abs(VOUT)>=2||!OFFSET&&VOUT>=2)?VOUT:0, abs(VOUT)>=1000?0:1); //diff
+    u8g2.setCursor(0,64); u8g2.print((OFFSET&&abs(VOUT)>=1||!OFFSET&&VOUT>=1)?VOUT:0, abs(VOUT)>=1000?0:1); //diff
     if (!OFFSET && readDiff>ADC_OVERLOAD || OFFSET && abs(readDiff)>ADC_OVERLOAD/2)
     {
       u8g2.setFont(u8g2_font_9x15B_tf);
