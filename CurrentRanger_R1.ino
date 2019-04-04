@@ -61,6 +61,8 @@ uint32_t lastInteraction=0;
 #define TONE_BEEP 4200
 //***********************************************************************************************************
 #define AUTORANGING_EN
+#define MODE_MANUAL 0
+#define MODE_AUTORANGE 1
 #define STARTUP_MODE        MODE_MANUAL //MODE_AUTORANGE
 #define SWITCHDELAY_UP      8 //ms
 #define SWITCHDELAY_DOWN    8 //ms
@@ -96,7 +98,10 @@ Adafruit_FreeTouch qt[3] = {
 #define SERIALBAUD 230400      //Serial baud for HC-06 bluetooth output
 #define BT_OUTPUT_AMPS        //ADC | AMPS | NANOS Change format of bluetooth data
 #define BT_REFRESH_INTERVAL 200 //ms
+#define AUTOFF_EN
+#ifdef AUTOFF_EN
 #define AUTOFF_INTERVAL 600000 //turn unit off after 10min of inactivity
+#endif
 //***********************************************************************************************************
 
 int offsetCorrectionValue = 0;
@@ -205,6 +210,9 @@ void setup() {
   linearity |= ((*((uint32_t *) ADC_FUSES_LINEARITY_1_ADDR) & ADC_FUSES_LINEARITY_1_Msk) >> ADC_FUSES_LINEARITY_1_Pos) << 5;
   ADC->CALIB.reg = ADC_CALIB_BIAS_CAL(bias) | ADC_CALIB_LINEARITY_CAL(linearity);
 */
+
+  if (STARTUP_MODE == MODE_AUTORANGE)
+    toggleAutoranging();
 }
 
 uint32_t oledInterval=0, lpfInterval=0, offsetInterval=0, autorangeInterval=0, btInterval=0;
@@ -387,6 +395,7 @@ byte AUTOOFFBUZZ=0;
 uint32_t autoOffBuzzInterval=0;
 byte autoffWarning=false;
 void handleAutoOff() {
+#ifdef AUTOFF_EN
   if (millis() - lastInteraction > AUTOFF_INTERVAL-5000)
   {
     autoffWarning = true;
@@ -410,6 +419,7 @@ void handleAutoOff() {
     }
   }
   else if (autoffWarning) { autoffWarning=false; digitalWrite(AUTOFF, HIGH); noTone(BUZZER); }
+#endif
 }
 
 void readVOUT() {
