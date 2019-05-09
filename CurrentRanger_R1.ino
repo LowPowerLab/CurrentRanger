@@ -198,7 +198,24 @@ void setup() {
       break;
     }
   }
-  SerialUSB.print(BT_found?"OK!":"no response.");
+
+  SerialUSB.print(BT_found?"OK!":"No response. Checking for version 3.0.\r\n");
+
+  if (!BT_found)
+  {
+    Serial.print("\r\n"); //assuming HC-06 version 3.0 that requires line ending
+    uint32_t timer=millis();
+    while(millis()-timer<50) //about 50ms to respond
+    {
+      if (Serial.available()==4 && Serial.read()=='O' && Serial.read()=='K' && Serial.read()=='\r' && Serial.read() == '\n')
+      {
+        BT_found=true;
+        break;
+      }
+    }
+  
+    SerialUSB.print(BT_found?"OK!":"No response.");
+  }
 
   //rangeMA(); //done in bootloader
   WDTset();
