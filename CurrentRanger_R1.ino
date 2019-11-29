@@ -168,6 +168,7 @@ void setup() {
       //               - offset is 12bit 2s complement format (p896)
   #endif
 
+#ifdef OLED_EN
   if (OLED_found && !calibrationPerformed && MA_PRESSED)
   {
     u8g2.clearBuffer();
@@ -183,6 +184,8 @@ void setup() {
     u8g2.sendBuffer();
     delay(2000);
   }
+#endif
+
 #endif
 
   //BT check
@@ -299,6 +302,7 @@ void loop()
 #endif
   }
 
+#ifdef OLED_EN
   if (OLED_found && millis() - oledInterval > OLED_REFRESH_INTERVAL) //refresh rate (ms)
   {
     oledInterval = millis();
@@ -351,6 +355,7 @@ void loop()
     }
     u8g2.sendBuffer();
   }
+#endif
 }
 
 uint32_t buttonLastChange_range;
@@ -545,6 +550,7 @@ void adcCorrectionCheck() {
 
   if (offsetCorrectionValue==0 && gainCorrectionValue==0)
   {
+#ifdef OLED_EN
     if (OLED_found)
     {
       u8g2.clearBuffer();
@@ -553,6 +559,7 @@ void adcCorrectionCheck() {
       u8g2.sendBuffer();
     }
     delay(1000);
+#endif
     SerialUSB.println("Starting ADC Calibration...");
     gainCorrectionValue = ADC_UNITY_GAIN;
     calibrateADC();
@@ -663,7 +670,7 @@ void calibrateADC() {
   //save values to EEPROM
   eeprom_ADCoffset.write(offsetCorrectionValue);
   eeprom_ADCgain.write(gainCorrectionValue);
-
+#ifdef OLED_EN
   if (OLED_found)
   {
     u8g2.clearBuffer();
@@ -680,6 +687,7 @@ void calibrateADC() {
     u8g2.sendBuffer();
     delay(3000);
   }
+#endif
 }
 
 uint16_t readGndLevel() {
