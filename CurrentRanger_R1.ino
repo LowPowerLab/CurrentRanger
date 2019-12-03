@@ -89,11 +89,11 @@ Adafruit_FreeTouch qt[3] = {
 };
 #define TOUCH_HIGH_THRESHOLD  600   //range is 0..1023
 #define MA_PRESSED      qt[2].measure()>TOUCH_HIGH_THRESHOLD
-#define MA_NOT_PRESSED  qt[2].measure()<TOUCH_HIGH_THRESHOLD
+#define MA_NOT_PRESSED  !(MA_PRESSED)
 #define UA_PRESSED      qt[1].measure()>TOUCH_HIGH_THRESHOLD
-#define UA_NOT_PRESSED  qt[1].measure()<TOUCH_HIGH_THRESHOLD
+#define UA_NOT_PRESSED  !(UA_PRESSED)
 #define NA_PRESSED      qt[0].measure()>TOUCH_HIGH_THRESHOLD
-#define NA_NOT_PRESSED  qt[0].measure()<TOUCH_HIGH_THRESHOLD
+#define NA_NOT_PRESSED  !(NA_PRESSED)
 //***********************************************************************************************************
 #define SERIALBAUD 230400      //Serial baud for HC-06 bluetooth output
 #define BT_EN
