@@ -3,7 +3,7 @@ Precision auto-ranging current meter (ammeter)
 
 ## [Please see the full guide and latest updates posted here.](https://lowpowerlab.com/guide/currentranger/)
 
-![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2018/09/DSC_2631-768x579.jpg)
+![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2018/09/Current_Ranger_R3_OLED.jpg)
 
 ## Quick Highlights
 Here are some of the features of this instrument which sets it apart:
@@ -11,7 +11,7 @@ Here are some of the features of this instrument which sets it apart:
 * Low noise zero-offset with 3-ranges (1mV output per nA/µA/mA)
 * Low input burden voltage, high precision & bandwidth analog outputs
 * Increased flexibility and usability with several input and output terminal options
-* Auto-ranging capable
+* Fast auto-ranging capable
 * Use standalone with a small OLED display or with a multimeter/oscilloscope
 * Ultra fast range switching between any ranges (even nA to mA) without any glitching/bouncing of a mechanical switch
 * Low Pass Filter mode – very useful to capture low noise  signals on oscilloscopes
@@ -21,7 +21,7 @@ Here are some of the features of this instrument which sets it apart:
 * Auto-power-off
 * Full digital control for power & range switching via touch pads
 * OLED display option to read output with usable precision
-* Datalogging possible via Bluetooth serial module
+* Datalogging possible via Bluetooth serial module or USB (use USB isolator, [see guide](https://lowpowerlab.com/guide/currentranger/safety-and-proper-usage/))
 * SAMD21 Cortex M0+ powered, change firmware to your needs
 * Optional buzzer for audible feedback
 
@@ -44,7 +44,7 @@ Here are some of the features of this instrument which sets it apart:
 * Cascaded MAX4239 amplifiers with 100x output gain
   - Bandwidth: >300KHz (-3dB)
 
-![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2018/09/DSC_2642.jpg)
+![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2019/05/Current_Ranger_R3_PCB_terminals.jpg)
 
 Sample no-load mA range comparison to µCurrent GOLD:
 ![mA compare µCurrent](https://lowpowerlab.com/wp-content/uploads/2018/09/DS1Z_QuickPrint11_2.png)
