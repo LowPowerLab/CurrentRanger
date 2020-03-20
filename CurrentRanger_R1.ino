@@ -61,6 +61,8 @@ uint32_t lastInteraction=0;
 #define TONE_BEEP 4200
 //***********************************************************************************************************
 #define AUTORANGING_EN
+#define MODE_MANUAL 0
+#define MODE_AUTORANGE 1
 #define STARTUP_MODE        MODE_MANUAL //MODE_AUTORANGE
 #define SWITCHDELAY_UP      8 //ms
 #define SWITCHDELAY_DOWN    8 //ms
@@ -87,22 +89,28 @@ Adafruit_FreeTouch qt[3] = {
 };
 #define TOUCH_HIGH_THRESHOLD  600   //range is 0..1023
 #define MA_PRESSED      qt[2].measure()>TOUCH_HIGH_THRESHOLD
-#define MA_NOT_PRESSED  qt[2].measure()<TOUCH_HIGH_THRESHOLD
+#define MA_NOT_PRESSED  !(MA_PRESSED)
 #define UA_PRESSED      qt[1].measure()>TOUCH_HIGH_THRESHOLD
-#define UA_NOT_PRESSED  qt[1].measure()<TOUCH_HIGH_THRESHOLD
+#define UA_NOT_PRESSED  !(UA_PRESSED)
 #define NA_PRESSED      qt[0].measure()>TOUCH_HIGH_THRESHOLD
-#define NA_NOT_PRESSED  qt[0].measure()<TOUCH_HIGH_THRESHOLD
+#define NA_NOT_PRESSED  !(NA_PRESSED)
 //***********************************************************************************************************
 #define SERIALBAUD 230400      //Serial baud for HC-06 bluetooth output
+#define BT_EN
 #define BT_OUTPUT_AMPS        //ADC | AMPS | NANOS Change format of bluetooth data
 #define BT_REFRESH_INTERVAL 200 //ms
+#define AUTOFF_EN
+#ifdef AUTOFF_EN
 #define AUTOFF_INTERVAL 600000 //turn unit off after 10min of inactivity
+#endif
 //***********************************************************************************************************
 
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 byte calibrationPerformed=false;
+#ifdef BT_EN
 byte BT_found=false;
+#endif
 
 void setup() {
   SerialUSB.begin(1); //USB hyper speed, baud wont matter
@@ -163,6 +171,7 @@ void setup() {
       //               - offset is 12bit 2s complement format (p896)
   #endif
 
+#ifdef OLED_EN
   if (OLED_found && !calibrationPerformed && MA_PRESSED)
   {
     u8g2.clearBuffer();
@@ -180,6 +189,9 @@ void setup() {
   }
 #endif
 
+#endif
+
+#ifdef BT_EN
   //BT check
   Serial.begin(SERIALBAUD);
   SerialUSB.print("Bluetooth AT check @");SerialUSB.print(SERIALBAUD);SerialUSB.print("baud...");
@@ -193,7 +205,25 @@ void setup() {
       break;
     }
   }
-  SerialUSB.print(BT_found?"OK!":"no response.");
+
+  SerialUSB.print(BT_found?"OK!":"No response. Checking for version 3.0.\r\n");
+
+  if (!BT_found)
+  {
+    Serial.print("\r\n"); //assuming HC-06 version 3.0 that requires line ending
+    uint32_t timer=millis();
+    while(millis()-timer<50) //about 50ms to respond
+    {
+      if (Serial.available()==4 && Serial.read()=='O' && Serial.read()=='K' && Serial.read()=='\r' && Serial.read() == '\n')
+      {
+        BT_found=true;
+        break;
+      }
+    }
+  
+    SerialUSB.print(BT_found?"OK!":"No response.");
+  }
+#endif
 
   //rangeMA(); //done in bootloader
   WDTset();
@@ -205,6 +235,9 @@ void setup() {
   linearity |= ((*((uint32_t *) ADC_FUSES_LINEARITY_1_ADDR) & ADC_FUSES_LINEARITY_1_Msk) >> ADC_FUSES_LINEARITY_1_Pos) << 5;
   ADC->CALIB.reg = ADC_CALIB_BIAS_CAL(bias) | ADC_CALIB_LINEARITY_CAL(linearity);
 */
+
+  if (STARTUP_MODE == MODE_AUTORANGE)
+    toggleAutoranging();
 }
 
 uint32_t oledInterval=0, lpfInterval=0, offsetInterval=0, autorangeInterval=0, btInterval=0;
@@ -250,8 +283,7 @@ void loop()
     }
     else if (readDiff >= RANGE_SWITCH_THRESHOLD_HIGH)
     {
-      if      (RANGE_NA) { rangeUA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_UP); }
-      else if (RANGE_UA) { rangeMA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_UP); }
+      rangeMA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_UP);
     }
     if (rangeSwitched) {
       rangeSwitched=false;
@@ -260,6 +292,7 @@ void loop()
   }
 #endif
 
+#ifdef BT_EN
   if (BT_found && millis() - btInterval > BT_REFRESH_INTERVAL) //refresh rate (ms)
   {
     btInterval = millis();
@@ -273,7 +306,9 @@ void loop()
     Serial.println(VOUT * (RANGE_NA ? 1 : RANGE_UA ? 1000 : 1000000));
 #endif
   }
+#endif
 
+#ifdef OLED_EN
   if (OLED_found && millis() - oledInterval > OLED_REFRESH_INTERVAL) //refresh rate (ms)
   {
     oledInterval = millis();
@@ -326,6 +361,7 @@ void loop()
     }
     u8g2.sendBuffer();
   }
+#endif
 }
 
 uint32_t buttonLastChange_range;
@@ -387,6 +423,7 @@ byte AUTOOFFBUZZ=0;
 uint32_t autoOffBuzzInterval=0;
 byte autoffWarning=false;
 void handleAutoOff() {
+#ifdef AUTOFF_EN
   if (millis() - lastInteraction > AUTOFF_INTERVAL-5000)
   {
     autoffWarning = true;
@@ -410,6 +447,7 @@ void handleAutoOff() {
     }
   }
   else if (autoffWarning) { autoffWarning=false; digitalWrite(AUTOFF, HIGH); noTone(BUZZER); }
+#endif
 }
 
 void readVOUT() {
@@ -518,6 +556,7 @@ void adcCorrectionCheck() {
 
   if (offsetCorrectionValue==0 && gainCorrectionValue==0)
   {
+#ifdef OLED_EN
     if (OLED_found)
     {
       u8g2.clearBuffer();
@@ -526,6 +565,7 @@ void adcCorrectionCheck() {
       u8g2.sendBuffer();
     }
     delay(1000);
+#endif
     SerialUSB.println("Starting ADC Calibration...");
     gainCorrectionValue = ADC_UNITY_GAIN;
     calibrateADC();
@@ -636,7 +676,7 @@ void calibrateADC() {
   //save values to EEPROM
   eeprom_ADCoffset.write(offsetCorrectionValue);
   eeprom_ADCgain.write(gainCorrectionValue);
-
+#ifdef OLED_EN
   if (OLED_found)
   {
     u8g2.clearBuffer();
@@ -653,6 +693,7 @@ void calibrateADC() {
     u8g2.sendBuffer();
     delay(3000);
   }
+#endif
 }
 
 uint16_t readGndLevel() {
