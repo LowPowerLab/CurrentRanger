@@ -330,6 +330,7 @@ void loop()
         {
           Serial.println("AUTO_OFF_ENABLED");
           AUTOFF_INTERVAL = AUTOFF_DEFAULT;
+          lastRangeChange = millis();
         }
         eeprom_AUTOFF.write(AUTOFF_INTERVAL);
         break;
