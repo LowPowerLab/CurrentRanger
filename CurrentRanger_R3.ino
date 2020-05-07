@@ -83,7 +83,7 @@ Adafruit_FreeTouch qt[3] = {
   Adafruit_FreeTouch( TOUCH_U, OVERSAMPLE_1, RESISTOR_50K, FREQ_MODE_NONE ),
   Adafruit_FreeTouch( TOUCH_M, OVERSAMPLE_1, RESISTOR_50K, FREQ_MODE_NONE ),
 };
-#define TOUCH_HIGH_THRESHOLD  600 //range is 0..1023
+#define TOUCH_HIGH_THRESHOLD  400 //range is 0..1023
 #define MA_PRESSED            qt[2].measure()>TOUCH_HIGH_THRESHOLD
 #define MA_NOT_PRESSED        !(MA_PRESSED)
 #define UA_PRESSED            qt[1].measure()>TOUCH_HIGH_THRESHOLD
@@ -107,6 +107,7 @@ uint16_t gainCorrectionValue = 0;
 float ldoValue = 0, ldoOptimized=0;
 uint16_t AUTOFF_INTERVAL = 0;
 uint8_t USB_LOGGING_ENABLED = false;
+uint8_t TOUCH_DEBUG_ENABLED = false;
 uint8_t BT_LOGGING_ENABLED = true;
 uint8_t calibrationPerformed=false;
 uint8_t analog_ref_half=true;
@@ -316,6 +317,10 @@ void loop()
         USB_LOGGING_ENABLED =! USB_LOGGING_ENABLED;
         Serial.println(USB_LOGGING_ENABLED ? "USB_LOGGING_ENABLED" : "USB_LOGGING_DISABLED");
         break;
+      case 't': //toggle touchpad serial output debug info
+        TOUCH_DEBUG_ENABLED =! TOUCH_DEBUG_ENABLED;
+        Serial.println(TOUCH_DEBUG_ENABLED ? "TOUCH_DEBUG_ENABLED" : "TOUCH_DEBUG_DISABLED");
+        break;
       case 'b': //toggle BT/serial logging
         BT_LOGGING_ENABLED =! BT_LOGGING_ENABLED;
         Serial.println(BT_LOGGING_ENABLED ? "BT_LOGGING_ENABLED" : "BT_LOGGING_DISABLED");
@@ -459,6 +464,12 @@ void handleTouchPads() {
   if ((millis() - buttonLastChange_range < 200) ||
       (millis() - touchSampleInterval < TOUCH_SAMPLE_INTERVAL))
     return;
+
+  if (TOUCH_DEBUG_ENABLED) {
+    Serial.print(qt[2].measure());Serial.print('\t');
+    Serial.print(qt[1].measure());Serial.print('\t');
+    Serial.println(qt[0].measure());
+  }
 
   touchSampleInterval = millis();
 
