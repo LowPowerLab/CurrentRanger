@@ -118,6 +118,7 @@ float ldoValue = 0, ldoOptimized=0;
 uint16_t AUTOFF_INTERVAL = 0;
 uint8_t USB_LOGGING_ENABLED = false;
 uint8_t TOUCH_DEBUG_ENABLED = false;
+uint8_t GPIO_HEADER_RANGING = false;
 uint8_t BT_LOGGING_ENABLED = true;
 uint8_t LOGGING_FORMAT = LOGGING_FORMAT_EXPONENT;
 uint16_t ADC_SAMPLING_SPEED = ADC_SAMPLING_SPEED_AVG;
@@ -251,7 +252,7 @@ void setup() {
     }
   }
 
-  Serial.print(BT_found?"OK!":"No response.\r\nChecking for version 3.0...");
+  Serial.print(BT_found?"OK!":"No HC-06 response.\r\nChecking for BT v3.0...");
 
   if (!BT_found)
   {
@@ -338,6 +339,13 @@ void loop()
       case 't': //toggle touchpad serial output debug info
         TOUCH_DEBUG_ENABLED =! TOUCH_DEBUG_ENABLED;
         Serial.println(TOUCH_DEBUG_ENABLED ? "TOUCH_DEBUG_ENABLED" : "TOUCH_DEBUG_DISABLED");
+        break;
+      case 'g': //toggle GPIOs indicating ranging
+        GPIO_HEADER_RANGING =! GPIO_HEADER_RANGING;
+        digitalWrite(SCK, GPIO_HEADER_RANGING && rangeUnit=='m' ? HIGH : LOW );
+        digitalWrite(MISO, GPIO_HEADER_RANGING && rangeUnit=='u' ? HIGH : LOW );
+        digitalWrite(MOSI, GPIO_HEADER_RANGING && rangeUnit=='n' ? HIGH : LOW );
+        Serial.println(GPIO_HEADER_RANGING ? "GPIO_HEADER_RANGING_ENABLED" : "GPIO_HEADER_RANGING_DISABLED");
         break;
       case 'b': //toggle BT/serial logging
         BT_LOGGING_ENABLED =! BT_LOGGING_ENABLED;
@@ -534,6 +542,11 @@ void rangeMA() {
   digitalWrite(MA,HIGH);
   digitalWrite(UA,LOW);
   digitalWrite(NA,LOW);
+  if (GPIO_HEADER_RANGING) {
+    digitalWrite(SCK, HIGH);
+    digitalWrite(MISO, LOW);
+    digitalWrite(MOSI, LOW);
+  }
   analogReferenceHalf(true);
 #ifdef BT_OUTPUT_ADC
   if (BT_found) SerialBT.println("RANGE: MA");
@@ -545,6 +558,11 @@ void rangeUA() {
   digitalWrite(UA,HIGH);
   digitalWrite(MA,LOW);
   digitalWrite(NA,LOW);
+  if (GPIO_HEADER_RANGING) {
+    digitalWrite(SCK, LOW);
+    digitalWrite(MISO, HIGH);
+    digitalWrite(MOSI, LOW);
+  }
   analogReferenceHalf(true);
 #ifdef BT_OUTPUT_ADC
   if (BT_found) SerialBT.println("RANGE: UA");
@@ -556,6 +574,11 @@ void rangeNA() {
   digitalWrite(NA,HIGH);
   digitalWrite(MA,LOW);
   digitalWrite(UA,LOW);
+  if (GPIO_HEADER_RANGING) {
+    digitalWrite(SCK, LOW);
+    digitalWrite(MISO, LOW);
+    digitalWrite(MOSI, HIGH);
+  }
   analogReferenceHalf(true);
 #ifdef BT_OUTPUT_ADC
   if (BT_found) SerialBT.println("RANGE: NA");
@@ -728,7 +751,9 @@ void printSerialMenu() {
   Serial.println("a = toggle Auto-Off function");
   Serial.print  ("b = toggle BT/serial logging (");Serial.print(SERIAL_UART_BAUD);Serial.println("baud)");
   Serial.println("f = cycle serial logging formats (exponent,nA,uA,mA/raw-ADC)");
+  Serial.println("g = toggle GPIO range indication (SCK=mA,MISO=uA,MOSI=nA)");
   Serial.println("s = cycle ADC sampling speeds (average,faster,slower)");
+  Serial.println("t = toggle touchpad serial output debug info");
   Serial.println("u = toggle USB/serial logging");
   Serial.println("< = Calibrate LDO value (-1mV)");
   Serial.println("> = Calibrate LDO value (+1mV)");
