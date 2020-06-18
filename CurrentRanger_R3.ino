@@ -22,10 +22,18 @@
 #define BIAS_LED       11
 #define LPFPIN         4
 #define LPFLED         LED_BUILTIN
-#define MA             38
-#define UA             2
-#define NA             5
 #define AUTOFF         PIN_AUTO_OFF
+//***********************************************************************************************************
+#define MA_PIN PIN_PA13  //#define MA  38
+#define UA_PIN PIN_PA14  //#define UA  2
+#define NA_PIN PIN_PA15  //#define NA  5
+#define MA_GPIO_PIN PIN_PB11
+#define UA_GPIO_PIN PIN_PA12
+#define NA_GPIO_PIN PIN_PB10
+#define PINOP(pin, OP) (PORT->Group[(pin) / 32].OP.reg = (1 << ((pin) % 32)))
+#define PIN_OFF(THE_PIN) PINOP(THE_PIN, OUTCLR)
+#define PIN_ON(THE_PIN) PINOP(THE_PIN, OUTSET)
+#define PIN_TGL(THE_PIN) PINOP(THE_PIN, OUTTGL)
 //***********************************************************************************************************
 #define SENSE_OUTPUT           A3
 #define SENSE_GNDISO           A2
@@ -180,9 +188,12 @@ void setup() {
   pinMode(LPFLED, OUTPUT); //STATUS/LPF-LED
   pinMode(LPFPIN, OUTPUT); //LPF control pin
   pinMode(BUZZER, OUTPUT);
-  pinMode(MA,OUTPUT);
-  pinMode(UA,OUTPUT);
-  pinMode(NA,OUTPUT);
+  PINOP(MA_PIN, DIRSET);
+  PINOP(UA_PIN, DIRSET);
+  PINOP(NA_PIN, DIRSET);
+  PINOP(MA_GPIO_PIN, DIRSET);
+  PINOP(UA_GPIO_PIN, DIRSET);
+  PINOP(NA_GPIO_PIN, DIRSET);
 
   qt[0].begin(); qt[1].begin(); qt[2].begin(); //touch pads
   analogWriteResolution(10);  //DAC resolution
@@ -342,9 +353,11 @@ void loop()
         break;
       case 'g': //toggle GPIOs indicating ranging
         GPIO_HEADER_RANGING =! GPIO_HEADER_RANGING;
-        digitalWrite(SCK, GPIO_HEADER_RANGING && rangeUnit=='m' ? HIGH : LOW );
-        digitalWrite(MISO, GPIO_HEADER_RANGING && rangeUnit=='u' ? HIGH : LOW );
-        digitalWrite(MOSI, GPIO_HEADER_RANGING && rangeUnit=='n' ? HIGH : LOW );
+        if (GPIO_HEADER_RANGING) {
+          if (rangeUnit=='m') PIN_ON(MA_GPIO_PIN); else PIN_OFF(MA_GPIO_PIN);
+          if (rangeUnit=='u') PIN_ON(UA_GPIO_PIN); else PIN_OFF(UA_GPIO_PIN);
+          if (rangeUnit=='n') PIN_ON(NA_GPIO_PIN); else PIN_OFF(NA_GPIO_PIN);
+        }
         Serial.println(GPIO_HEADER_RANGING ? "GPIO_HEADER_RANGING_ENABLED" : "GPIO_HEADER_RANGING_DISABLED");
         break;
       case 'b': //toggle BT/serial logging
@@ -539,13 +552,13 @@ void handleTouchPads() {
 
 void rangeMA() {
   rangeUnit='m';
-  digitalWrite(MA,HIGH);
-  digitalWrite(UA,LOW);
-  digitalWrite(NA,LOW);
+  PIN_ON(MA_PIN);
+  PIN_OFF(UA_PIN);
+  PIN_OFF(NA_PIN);
   if (GPIO_HEADER_RANGING) {
-    digitalWrite(SCK, HIGH);
-    digitalWrite(MISO, LOW);
-    digitalWrite(MOSI, LOW);
+    PIN_ON(MA_GPIO_PIN);
+    PIN_OFF(UA_GPIO_PIN);
+    PIN_OFF(NA_GPIO_PIN);
   }
   analogReferenceHalf(true);
 #ifdef BT_OUTPUT_ADC
@@ -555,13 +568,13 @@ void rangeMA() {
 
 void rangeUA() {
   rangeUnit='u';
-  digitalWrite(UA,HIGH);
-  digitalWrite(MA,LOW);
-  digitalWrite(NA,LOW);
+  PIN_OFF(MA_PIN);
+  PIN_ON(UA_PIN);
+  PIN_OFF(NA_PIN);
   if (GPIO_HEADER_RANGING) {
-    digitalWrite(SCK, LOW);
-    digitalWrite(MISO, HIGH);
-    digitalWrite(MOSI, LOW);
+    PIN_OFF(MA_GPIO_PIN);
+    PIN_ON(UA_GPIO_PIN);
+    PIN_OFF(NA_GPIO_PIN);
   }
   analogReferenceHalf(true);
 #ifdef BT_OUTPUT_ADC
@@ -571,13 +584,13 @@ void rangeUA() {
 
 void rangeNA() {
   rangeUnit='n';
-  digitalWrite(NA,HIGH);
-  digitalWrite(MA,LOW);
-  digitalWrite(UA,LOW);
+  PIN_OFF(MA_PIN);
+  PIN_OFF(UA_PIN);
+  PIN_ON(NA_PIN);
   if (GPIO_HEADER_RANGING) {
-    digitalWrite(SCK, LOW);
-    digitalWrite(MISO, LOW);
-    digitalWrite(MOSI, HIGH);
+    PIN_OFF(MA_GPIO_PIN);
+    PIN_OFF(UA_GPIO_PIN);
+    PIN_ON(NA_GPIO_PIN);
   }
   analogReferenceHalf(true);
 #ifdef BT_OUTPUT_ADC
