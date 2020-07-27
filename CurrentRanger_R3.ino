@@ -18,6 +18,7 @@
 #include <FlashStorage.h>          //for emulated EEPROM - https://github.com/cmaglie/FlashStorage
 #include <Adafruit_FreeTouch.h>    //https://github.com/adafruit/Adafruit_FreeTouch
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
+//#include <ATSAMD21_ADC.h>
 //***********************************************************************************************************
 #define BIAS_LED       11
 #define LPFPIN         4
@@ -146,7 +147,6 @@ FlashStorage(eeprom_LDO, float);
 FlashStorage(eeprom_AUTOFF, uint16_t);
 FlashStorage(eeprom_LOGGINGFORMAT, uint8_t);
 FlashStorage(eeprom_ADCSAMPLINGSPEED, uint8_t);
-#include <ATSAMD21_ADC.h>
 //***********************************************************************************************************
 
 void setup() {
@@ -653,6 +653,11 @@ void Beep(byte theDelay, boolean twoSounds) {
     delay(10);
     tone(BUZZER, 4500, theDelay);
   }
+}
+
+static __inline__ void syncADC() __attribute__((always_inline, unused));
+static void syncADC() {
+  while(ADC->STATUS.bit.SYNCBUSY == 1);
 }
 
 void setupADC() {
