@@ -541,15 +541,24 @@ void loop()
     else u8g2.drawGlyph(115, 10, 0xE242); //u8g2.drawStr(88,12,"LoBat!");
 
     u8g2.setFont(u8g2_font_6x12_tf); //7us
+
+    // Display oversample exponent in hex
+    char buf[2] = {
+        ADC_SAMPLEN < 10
+          ? ('0' + ADC_SAMPLEN)
+          : ('A' - 10 + ADC_SAMPLEN),
+    };
+    u8g2.drawStr(0,12, buf); // ?? us
+
     if (AUTORANGE)
     {
-      u8g2.drawStr(0,12, analog_ref_half ? "AUTO\xb7\xbd" : "AUTO");
-      u8g2.setCursor(42,12); u8g2.print(readDiff,0);
+      u8g2.drawStr(12,12, analog_ref_half ? "AUTO\xb7\xbd" : "AUTO");
+      u8g2.setCursor(54,12); u8g2.print(readDiff,0);
     }
     else
     {
-      if (analog_ref_half) u8g2.drawStr(0,12,"\xbd");
-      u8g2.setCursor(12,12); u8g2.print(readDiff,0);
+      if (analog_ref_half) u8g2.drawStr(12,12,"\xbd");
+      u8g2.setCursor(24,12); u8g2.print(readDiff,0);
     }
 
     if (autoffBuzz) u8g2.drawStr(5,26,"* AUTO OFF! *"); //autoffWarning
