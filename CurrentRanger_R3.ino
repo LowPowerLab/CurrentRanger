@@ -18,7 +18,6 @@
 #include <FlashStorage.h>          //for emulated EEPROM - https://github.com/cmaglie/FlashStorage
 #include <Adafruit_FreeTouch.h>    //https://github.com/adafruit/Adafruit_FreeTouch
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
-//#include <ATSAMD21_ADC.h>
 //***********************************************************************************************************
 #define BIAS_LED       11
 #define LPFPIN         4
@@ -40,12 +39,6 @@
 #define SENSE_GNDISO           A2
 #define SENSE_VIN              A5
 #define ADC_PRESCALER          ADC_CTRLB_PRESCALER_DIV16
-//#define ADC_AVGCTRL            ADC_AVGCTRL_SAMPLENUM_128 | ADC_AVGCTRL_ADJRES(0x4ul)
-                               //ADC_AVGCTRL_SAMPLENUM_1 | ADC_AVGCTRL_ADJRES(0x00ul);  // take 1 sample, adjusting result by 0
-                               //ADC_AVGCTRL_SAMPLENUM_16 | ADC_AVGCTRL_ADJRES(0x4ul); //take 16 samples adjust by 4
-                               //ADC_AVGCTRL_SAMPLENUM_256 | ADC_AVGCTRL_ADJRES(0x4ul); //take 256 samples adjust by 4
-                               //ADC_AVGCTRL_SAMPLENUM_512 | ADC_AVGCTRL_ADJRES(0x4ul); //take 512 samples adjust by 4
-                               //ADC_AVGCTRL_SAMPLENUM_1024 | ADC_AVGCTRL_ADJRES(0x4ul); //take 1024 samples adjust by 4
 #define ADC_SAMPCTRL           0b111 //sample timing [fast 0..0b111 slow]
 #define ADCFULLRANGE           4095.0
 #define VBATREADLOOPS          100  //read vbat every this many OLED_REFRESH_INTERVAL loops
@@ -111,10 +104,6 @@ Adafruit_FreeTouch qt[3] = {
 #define LOGGING_FORMAT_MILLIS   3 //ex: 1234 = 1.234A = 1234000uA = 1234000000nA
 #define LOGGING_FORMAT_ADC      4 //raw output for each range (0..4095)
 //***********************************************************************************************************
-#define ADC_SAMPLING_SPEED_AVG   0
-#define ADC_SAMPLING_SPEED_FAST  1
-#define ADC_SAMPLING_SPEED_SLOW  2
-//***********************************************************************************************************
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 float ldoValue = 0, ldoOptimized=0;
@@ -124,8 +113,8 @@ uint8_t TOUCH_DEBUG_ENABLED = false;
 uint8_t GPIO_HEADER_RANGING = false;
 uint8_t BT_LOGGING_ENABLED = true;
 uint8_t LOGGING_FORMAT = LOGGING_FORMAT_EXPONENT;
-uint16_t ADC_SAMPLING_SPEED = ADC_SAMPLING_SPEED_AVG;
-uint32_t ADC_AVGCTRL;
+uint8_t ADC_SAMPLEN = 0;
+uint8_t ADC_AVGCTRL;
 uint8_t calibrationPerformed=false;
 uint8_t analog_ref_half=true;
 char rangeUnit = 'm';
@@ -140,7 +129,7 @@ FlashStorage(eeprom_ADCgain, uint16_t);
 FlashStorage(eeprom_LDO, float);
 FlashStorage(eeprom_AUTOFF, uint16_t);
 FlashStorage(eeprom_LOGGINGFORMAT, uint8_t);
-FlashStorage(eeprom_ADCSAMPLINGSPEED, uint8_t);
+FlashStorage(eeprom_ADCSAMPLEN, uint8_t);
 //***********************************************************************************************************
 
 void setup() {
@@ -213,7 +202,7 @@ void setup() {
     saveLDO(LDO_DEFAULT);
   else ldoOptimizeRefresh();
 
-  ADC_SAMPLING_SPEED = eeprom_ADCSAMPLINGSPEED.read();
+  ADC_SAMPLEN = eeprom_ADCSAMPLEN.read();
   refreshADCSamplingSpeed(); //load correct value into ADC_AVGCTRL
 
   if (gainCorrectionValue!=0) //check if anything saved in EEPROM (gain changed via SerialUSB +/-)
@@ -315,6 +304,7 @@ void loop()
     #define MODE_DISABLED 0
     #define MODE_GAIN 1
     #define MODE_LDO 2
+    #define MODE_SAMPLEN 3
     static char mode;
     
     char inByte = Serial.read();
@@ -338,6 +328,12 @@ void loop()
           Serial.println("ldo adj mode");
         }
         break;
+      case 'O':
+        if (mode == MODE_DISABLED) {
+          mode = MODE_SAMPLEN;
+          Serial.println("oversampling adj mode");
+        }
+        break;
       case '+':
         switch (mode) {
           case MODE_GAIN:
@@ -350,6 +346,17 @@ void loop()
             saveLDO(ldoValue+0.001);
             Serial.print("new LDO_Value = ");
             Serial.println(ldoValue, 3);
+            break;
+          case MODE_SAMPLEN:
+            if (ADC_SAMPLEN < ADC_AVGCTRL_SAMPLENUM_1024_Val) {
+              ++ADC_SAMPLEN;
+              Serial.print("oversample ");
+              Serial.println(1U << ADC_SAMPLEN);
+              eeprom_ADCSAMPLEN.write(ADC_SAMPLEN);
+              refreshADCSamplingSpeed();
+            } else {
+              Serial.println("at upper limit");
+            }
             break;
           default:
             Serial.println("no mode selected");
@@ -368,6 +375,17 @@ void loop()
             saveLDO(ldoValue-0.001);
             Serial.print("new LDO_Value = ");
             Serial.println(ldoValue, 3);
+            break;
+          case MODE_SAMPLEN:
+            if (ADC_SAMPLEN > ADC_AVGCTRL_SAMPLENUM_1_Val) {
+              --ADC_SAMPLEN;
+              Serial.print("oversample ");
+              Serial.println(1U << ADC_SAMPLEN);
+              eeprom_ADCSAMPLEN.write(ADC_SAMPLEN);
+              refreshADCSamplingSpeed();
+            } else {
+              Serial.println("at lower limit");
+            }
             break;
           default:
             Serial.println("no mode selected");
@@ -403,14 +421,6 @@ void loop()
         if (LOGGING_FORMAT==LOGGING_FORMAT_MICROS) Serial.println("LOGGING_FORMAT_MICROS"); else
         if (LOGGING_FORMAT==LOGGING_FORMAT_MILLIS) Serial.println("LOGGING_FORMAT_MILLIS"); else
         if (LOGGING_FORMAT==LOGGING_FORMAT_ADC) Serial.println("LOGGING_FORMAT_ADC");
-        break;
-      case 's':
-        if (++ADC_SAMPLING_SPEED>ADC_SAMPLING_SPEED_SLOW) ADC_SAMPLING_SPEED=ADC_SAMPLING_SPEED_AVG;
-        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_AVG) Serial.println("ADC_SAMPLING_SPEED_AVG"); else
-        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_FAST) Serial.println("ADC_SAMPLING_SPEED_FAST"); else
-        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_SLOW) Serial.println("ADC_SAMPLING_SPEED_SLOW");
-        eeprom_ADCSAMPLINGSPEED.write(ADC_SAMPLING_SPEED);
-        refreshADCSamplingSpeed();
         break;
       case 'a': //toggle autoOff function
         if (AUTOFF_INTERVAL == AUTOFF_DEFAULT)
@@ -793,19 +803,9 @@ void saveLDO(float newLdoValue) {
 }
 
 void refreshADCSamplingSpeed() {
-  if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_AVG)
-    ADC_AVGCTRL = ADC_AVGCTRL_SAMPLENUM_64 | ADC_AVGCTRL_ADJRES(0x4ul);
-  else if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_FAST)
-    ADC_AVGCTRL = ADC_AVGCTRL_SAMPLENUM_16 | ADC_AVGCTRL_ADJRES(0x4ul); //take 16 samples adjust by 4
-  else if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_SLOW)
-    ADC_AVGCTRL = ADC_AVGCTRL_SAMPLENUM_256 | ADC_AVGCTRL_ADJRES(0x4ul); //take 512 samples adjust by 4
-  //other combinations:
-  //ADC_AVGCTRL_SAMPLENUM_128 | ADC_AVGCTRL_ADJRES(0x4ul)
-  //ADC_AVGCTRL_SAMPLENUM_1 | ADC_AVGCTRL_ADJRES(0x00ul);  // take 1 sample, adjusting result by 0
-  //ADC_AVGCTRL_SAMPLENUM_16 | ADC_AVGCTRL_ADJRES(0x4ul); //take 16 samples adjust by 4
-  //ADC_AVGCTRL_SAMPLENUM_256 | ADC_AVGCTRL_ADJRES(0x4ul); //take 256 samples adjust by 4
-  //ADC_AVGCTRL_SAMPLENUM_512 | ADC_AVGCTRL_ADJRES(0x4ul); //take 512 samples adjust by 4
-  //ADC_AVGCTRL_SAMPLENUM_1024 | ADC_AVGCTRL_ADJRES(0x4ul); //take 1024 samples adjust by 4
+  uint8_t adjres = (ADC_SAMPLEN < 4) ? ADC_SAMPLEN : 4;
+  ADC_AVGCTRL = ((ADC_SAMPLEN << ADC_AVGCTRL_SAMPLENUM_Pos) & ADC_AVGCTRL_SAMPLENUM_Msk)
+      | ((adjres << ADC_AVGCTRL_ADJRES_Pos) & ADC_AVGCTRL_ADJRES_Msk);
   setupADC();
 }
 
@@ -814,6 +814,7 @@ void printCalibInfo() {
   Serial.print("Offset="); Serial.println(offsetCorrectionValue);
   Serial.print("Gain="); Serial.println(gainCorrectionValue);
   Serial.print("LDO="); Serial.println(ldoValue,3);
+  Serial.print("Oversample="); Serial.println(1U << ADC_SAMPLEN);
 }
 void printSerialMenu() {
   Serial.println("\r\nUSB serial commands:");
@@ -830,6 +831,7 @@ void printSerialMenu() {
   Serial.println("\r\nMode commands:");
   Serial.println("G = gain calibration mode (1)");
   Serial.println("L = ldo calibration mode (1 mV)");
+  Serial.println("O = oversampling rate");
   Serial.println("! = exit mode");
   Serial.println();
 }
