@@ -312,30 +312,67 @@ void loop()
   uint32_t timestamp=micros();
   if (Serial.available()>0)
   {
+    #define MODE_DISABLED 0
+    #define MODE_GAIN 1
+    #define MODE_LDO 2
+    static char mode;
+    
     char inByte = Serial.read();
     switch (inByte)
     {
+      case '!':
+        if (mode) {
+          mode = 0;
+          Serial.println("exit mode");
+        }
+        break;
+      case 'G':
+        if (mode == MODE_DISABLED) {
+          mode = MODE_GAIN;
+          Serial.println("gain adj mode");
+        }
+        break;
+      case 'L':
+        if (mode == MODE_DISABLED) {
+          mode = MODE_LDO;
+          Serial.println("ldo adj mode");
+        }
+        break;
       case '+':
-        eeprom_ADCgain.write(++gainCorrectionValue);
-        analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
-        Serial.print("new gainCorrectionValue = ");
-        Serial.println(gainCorrectionValue);
+        switch (mode) {
+          case MODE_GAIN:
+            eeprom_ADCgain.write(++gainCorrectionValue);
+            analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
+            Serial.print("new gainCorrectionValue = ");
+            Serial.println(gainCorrectionValue);
+            break;
+          case MODE_LDO:          
+            saveLDO(ldoValue+0.001);
+            Serial.print("new LDO_Value = ");
+            Serial.println(ldoValue, 3);
+            break;
+          default:
+            Serial.println("no mode selected");
+            break;
+        }
         break;
       case '-':
-        eeprom_ADCgain.write(--gainCorrectionValue);
-        analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
-        Serial.print("new gainCorrectionValue = ");
-        Serial.println(gainCorrectionValue);
-        break;
-      case '<':
-        saveLDO(ldoValue-0.001);
-        Serial.print("new LDO_Value = ");
-        Serial.println(ldoValue, 3);
-        break;
-      case '>':
-        saveLDO(ldoValue+0.001);
-        Serial.print("new LDO_Value = ");
-        Serial.println(ldoValue, 3);
+        switch (mode) {
+          case MODE_GAIN:
+            eeprom_ADCgain.write(--gainCorrectionValue);
+            analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
+            Serial.print("new gainCorrectionValue = ");
+            Serial.println(gainCorrectionValue);
+            break;
+          case MODE_LDO:          
+            saveLDO(ldoValue-0.001);
+            Serial.print("new LDO_Value = ");
+            Serial.println(ldoValue, 3);
+            break;
+          default:
+            Serial.println("no mode selected");
+            break;
+        }
         break;
       case 'u': //toggle USB logging
         USB_LOGGING_ENABLED =! USB_LOGGING_ENABLED;
@@ -787,11 +824,13 @@ void printSerialMenu() {
   Serial.println("s = cycle ADC sampling speeds (average,faster,slower)");
   Serial.println("t = toggle touchpad serial output debug info");
   Serial.println("u = toggle USB/serial logging");
-  Serial.println("< = Calibrate LDO value (-1mV)");
-  Serial.println("> = Calibrate LDO value (+1mV)");
-  Serial.println("- = Calibrate GAIN value (-1)");
-  Serial.println("+ = Calibrate GAIN value (+1)");
+  Serial.println("+ = increase mode value");
+  Serial.println("- = decrease mode value");
   Serial.println("? = Print this menu and calib info");
+  Serial.println("\r\nMode commands:");
+  Serial.println("G = gain calibration mode (1)");
+  Serial.println("L = ldo calibration mode (1 mV)");
+  Serial.println("! = exit mode");
   Serial.println();
 }
 
