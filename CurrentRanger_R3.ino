@@ -115,6 +115,13 @@ Adafruit_FreeTouch qt[3] = {
 //***********************************************************************************************************
 #define PREFERENCE_MU_SAMPLERATE 0x01  // default BIAS
 //***********************************************************************************************************
+static const char *const loggingFormat_str[] = {
+  [LOGGING_FORMAT_EXPONENT] = "exp (1.23E-3 = 123 mA)",
+  [LOGGING_FORMAT_NANOS] = "nA (1234 = 1.234 uA)",
+  [LOGGING_FORMAT_MICROS] = "uA (1234 = 1.234 mA)",
+  [LOGGING_FORMAT_MILLIS] = "mA (1234 = 1.234 A)",
+  [LOGGING_FORMAT_ADC] = "adc (0..4095)",
+};
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 float ldoValue = 0, ldoOptimized=0;
@@ -477,11 +484,7 @@ void loop()
       case 'f': //cycle through output logging formats
         if (++LOGGING_FORMAT>LOGGING_FORMAT_ADC) LOGGING_FORMAT=LOGGING_FORMAT_EXPONENT;
         eeprom_LOGGINGFORMAT.write(LOGGING_FORMAT);
-        if (LOGGING_FORMAT==LOGGING_FORMAT_EXPONENT) Serial.println("LOGGING_FORMAT_EXPONENT"); else
-        if (LOGGING_FORMAT==LOGGING_FORMAT_NANOS) Serial.println("LOGGING_FORMAT_NANOS"); else
-        if (LOGGING_FORMAT==LOGGING_FORMAT_MICROS) Serial.println("LOGGING_FORMAT_MICROS"); else
-        if (LOGGING_FORMAT==LOGGING_FORMAT_MILLIS) Serial.println("LOGGING_FORMAT_MILLIS"); else
-        if (LOGGING_FORMAT==LOGGING_FORMAT_ADC) Serial.println("LOGGING_FORMAT_ADC");
+        Serial.println(loggingFormat_str[LOGGING_FORMAT]);
         break;
       case 'a': //toggle autoOff function
         if (AUTOFF_INTERVAL == AUTOFF_DEFAULT)
@@ -895,6 +898,7 @@ void printCalibInfo() {
   Serial.print("Gain="); Serial.println(gainCorrectionValue);
   Serial.print("LDO="); Serial.println(ldoValue,3);
   Serial.print("SampleRate: "); sampleRateOutSerial();
+  Serial.print("LogFmt: "); Serial.println(loggingFormat_str[LOGGING_FORMAT]);
   Serial.print("uA+mA: ");
   Serial.println((PREFERENCES & PREFERENCE_MU_SAMPLERATE)
           ? "toggle samplerate adjust"
@@ -904,9 +908,9 @@ void printSerialMenu() {
   Serial.println("\r\nUSB serial commands:");
   Serial.println("a = toggle Auto-Off function");
   Serial.print  ("b = toggle BT/serial logging (");Serial.print(SERIAL_UART_BAUD);Serial.println("baud)");
-  Serial.println("f = cycle serial logging formats (exponent,nA,uA,mA/raw-ADC)");
+  Serial.println("f = cycle serial logging formats (exponent,nA,uA,mA/raw-ADC) [PREF]");
   Serial.println("g = toggle GPIO range indication (SCK=mA,MISO=uA,MOSI=nA)");
-  Serial.println("o = toggle touchpad offset (bias) / samplerate selection");
+  Serial.println("o = toggle touchpad offset (bias) / samplerate selection [PREF]");
   Serial.println("t = toggle touchpad serial output debug info");
   Serial.println("u = toggle USB/serial logging");
   Serial.println("+ = increase mode value");
