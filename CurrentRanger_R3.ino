@@ -114,6 +114,8 @@ Adafruit_FreeTouch qt[3] = {
 #define LOGGING_FORMAT_ADC      4 //raw output for each range (0..4095)
 //***********************************************************************************************************
 #define PREFERENCE_MU_SAMPLERATE 0x01  // default BIAS
+#define PREFERENCE_USB_TIMESTAMP 0x02  // timestamp serial samples
+#define PREFERENCE_BT_TIMESTAMP 0x04   // timestamp bluetooth samples
 //***********************************************************************************************************
 static const char *const loggingFormat_str[] = {
   [LOGGING_FORMAT_EXPONENT] = "exp (1.23E-3 = 123 mA)",
@@ -298,6 +300,7 @@ uint32_t oledInterval=0, lpfInterval=0, modeInterval=0, autorangeInterval=0, btI
 byte LPF=0, BIAS=0, AUTORANGE=0, SRADJUST=0;
 byte readVbatLoop=0;
 float vbat=0, VOUT=0;
+unsigned long readMicros;
 float read1=0,read2=0,readDiff=0;
 bool rangeSwitched=false;
 #define RANGE_MA rangeUnit=='m'
@@ -464,6 +467,14 @@ void loop()
         USB_LOGGING_ENABLED =! USB_LOGGING_ENABLED;
         Serial.println(USB_LOGGING_ENABLED ? "USB_LOGGING_ENABLED" : "USB_LOGGING_DISABLED");
         break;
+      case 'U': //toggle USB timestamping
+        PREFERENCES ^= PREFERENCE_USB_TIMESTAMP;
+        eeprom_PREFERENCES.write(PREFERENCES);
+        if (!(PREFERENCES & PREFERENCE_USB_TIMESTAMP)) {
+          Serial.print("NO ");
+        }
+        Serial.println("USB sample timestamps");
+        break;
       case 't': //toggle touchpad serial output debug info
         TOUCH_DEBUG_ENABLED =! TOUCH_DEBUG_ENABLED;
         Serial.println(TOUCH_DEBUG_ENABLED ? "TOUCH_DEBUG_ENABLED" : "TOUCH_DEBUG_DISABLED");
@@ -480,6 +491,14 @@ void loop()
       case 'b': //toggle BT/serial logging
         BT_LOGGING_ENABLED =! BT_LOGGING_ENABLED;
         Serial.println(BT_LOGGING_ENABLED ? "BT_LOGGING_ENABLED" : "BT_LOGGING_DISABLED");
+        break;
+      case 'B': //toggle BT timestamping
+        PREFERENCES ^= PREFERENCE_BT_TIMESTAMP;
+        eeprom_PREFERENCES.write(PREFERENCES);
+        if (!(PREFERENCES & PREFERENCE_BT_TIMESTAMP)) {
+          Serial.print("NO ");
+        }
+        Serial.println("BT sample timestamps");
         break;
       case 'f': //cycle through output logging formats
         if (++LOGGING_FORMAT>LOGGING_FORMAT_ADC) LOGGING_FORMAT=LOGGING_FORMAT_EXPONENT;
@@ -535,6 +554,9 @@ void loop()
     if (!AUTORANGE) readVOUT();
     VOUT = readDiff*ldoOptimized*(BIAS?1:OUTPUT_CALIB_FACTOR);
     VOUTCalculated=true;
+    if (PREFERENCES & PREFERENCE_USB_TIMESTAMP) {
+      Serial.print(readMicros); Serial.print(" ");
+    }
     if(LOGGING_FORMAT == LOGGING_FORMAT_EXPONENT) { Serial.print(VOUT); Serial.print("e"); Serial.println(RANGE_NA ? -9 : RANGE_UA ? -6 : -3); } else
     if(LOGGING_FORMAT == LOGGING_FORMAT_NANOS) Serial.println(VOUT * (RANGE_NA ? 1 : RANGE_UA ? 1000 : 1000000)); else
     if(LOGGING_FORMAT == LOGGING_FORMAT_MICROS) Serial.println(VOUT * (RANGE_NA ? 0.001 : RANGE_UA ? 1 : 1000)); else
@@ -555,6 +577,9 @@ void loop()
     if (!VOUTCalculated) {
       VOUT = readDiff*ldoOptimized*(BIAS?1:OUTPUT_CALIB_FACTOR);
       VOUTCalculated=true;
+    }
+    if (PREFERENCES & PREFERENCE_BT_TIMESTAMP) {
+      SerialBT.print(readMicros); SerialBT.print(" ");
     }
     if(LOGGING_FORMAT == LOGGING_FORMAT_EXPONENT) { SerialBT.print(VOUT); SerialBT.print("e"); SerialBT.println(RANGE_NA ? -9 : RANGE_UA ? -6 : -3); } else
     if(LOGGING_FORMAT == LOGGING_FORMAT_NANOS) SerialBT.println(VOUT * (RANGE_NA ? 1 : RANGE_UA ? 1000 : 1000000)); else
@@ -822,6 +847,7 @@ void setupADC() {
 
 int adcRead(byte ADCpin) { return (int)analogRead(ADCpin); }
 void readVOUT() {
+  readMicros = micros();
   readDiff = adcRead(SENSE_OUTPUT) - adcRead(SENSE_GNDISO);
 
   if (!analog_ref_half && readDiff > RANGE_SWITCH_THRESHOLD_LOW && readDiff < RANGE_SWITCH_THRESHOLD_HIGH/3)
@@ -903,16 +929,24 @@ void printCalibInfo() {
   Serial.println((PREFERENCES & PREFERENCE_MU_SAMPLERATE)
           ? "toggle samplerate adjust"
           : "toggle offset enable");
+  Serial.print("USB timestamp: ");
+  Serial.println((PREFERENCES & PREFERENCE_USB_TIMESTAMP)
+          ? "on" : "off");
+  Serial.print("BT timestamp: ");
+  Serial.println((PREFERENCES & PREFERENCE_BT_TIMESTAMP)
+          ? "on" : "off");
 }
 void printSerialMenu() {
   Serial.println("\r\nUSB serial commands:");
   Serial.println("a = toggle Auto-Off function");
   Serial.print  ("b = toggle BT/serial logging (");Serial.print(SERIAL_UART_BAUD);Serial.println("baud)");
+  Serial.println("B = toggle timestamp on BT/serial output [PREF]");
   Serial.println("f = cycle serial logging formats (exponent,nA,uA,mA/raw-ADC) [PREF]");
   Serial.println("g = toggle GPIO range indication (SCK=mA,MISO=uA,MOSI=nA)");
   Serial.println("o = toggle touchpad offset (bias) / samplerate selection [PREF]");
   Serial.println("t = toggle touchpad serial output debug info");
   Serial.println("u = toggle USB/serial logging");
+  Serial.println("U = toggle timestamp in USB/serial output [PREF]");
   Serial.println("+ = increase mode value");
   Serial.println("- = decrease mode value");
   Serial.println("? = Print this menu and calib info");
