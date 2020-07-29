@@ -115,7 +115,6 @@ Adafruit_FreeTouch qt[3] = {
 //***********************************************************************************************************
 #define PREFERENCE_MU_SAMPLERATE 0x01  // default BIAS
 //***********************************************************************************************************
-static const char samplerate_id[] = "H987654321L";
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 float ldoValue = 0, ldoOptimized=0;
@@ -298,6 +297,27 @@ bool rangeSwitched=false;
 #define RANGE_UA rangeUnit=='u'
 #define RANGE_NA rangeUnit=='n'
 
+const char *sampleRateStr(bool changing = false)
+{
+  static const char samplerate_id[] = "H987654321L";
+  static char buf[3];
+  char *bp = buf;
+  *bp++ = samplerate_id[ADC_SAMPLEN];
+  if (changing) {
+    *bp++ = '?';
+  }
+  *bp = 0;
+  return buf;
+}
+
+void sampleRateOutSerial()
+{
+  Serial.print(sampleRateStr());
+  Serial.print(" (div ");
+  Serial.print(1U << ADC_SAMPLEN);
+  Serial.println(")");
+}
+
 void sampleRateBeep()
 {
   static const uint16_t freq_Hz[] = {
@@ -333,17 +353,6 @@ bool sampleRateAdjust(int8_t delta)
     refreshADCSamplingSpeed();
   }
   return ok;
-}
-
-void sampleRateOutSerial()
-{
-  char buf[2] = {
-    samplerate_id[ADC_SAMPLEN],
-  };
-  Serial.print(buf);
-  Serial.print(" (div ");
-  Serial.print(1U << ADC_SAMPLEN);
-  Serial.println(")");
 }
 
 void loop()
@@ -595,11 +604,7 @@ void loop()
     u8g2.setFont(u8g2_font_6x12_tf); //7us
 
     // Display oversample exponent in hex
-    char buf[3] = {
-      samplerate_id[ADC_SAMPLEN],
-      SRADJUST ? '?' : 0,
-    };
-    u8g2.drawStr(0,12, buf); // ?? us
+    u8g2.drawStr(0,12, sampleRateStr(SRADJUST)); // ?? us
 
     if (AUTORANGE)
     {
@@ -889,7 +894,7 @@ void printCalibInfo() {
   Serial.print("Offset="); Serial.println(offsetCorrectionValue);
   Serial.print("Gain="); Serial.println(gainCorrectionValue);
   Serial.print("LDO="); Serial.println(ldoValue,3);
-  Serial.print("Oversample="); Serial.println(1U << ADC_SAMPLEN);
+  Serial.print("SampleRate: "); sampleRateOutSerial();
   Serial.print("uA+mA: ");
   Serial.println((PREFERENCES & PREFERENCE_MU_SAMPLERATE)
           ? "toggle samplerate adjust"
