@@ -547,7 +547,7 @@ void handleTouchPads() {
   if (MA_PRESSED && UA_PRESSED && NA_NOT_PRESSED && millis()-offsetInterval>1000) { toggleOffset(); Beep(3, false); }
 
   //AUTORANGE toggling
-  if (MA_PRESSED && NA_PRESSED && UA_NOT_PRESSED && millis()-autorangeInterval>1000) { toggleAutoranging(); Beep(20, false); delay(50); (20, false); }
+  if (MA_PRESSED && NA_PRESSED && UA_NOT_PRESSED && millis()-autorangeInterval>1000) { toggleAutoranging(); Beep(20, false); delay(50); Beep(20, false); }
 }
 
 void rangeMA() {
