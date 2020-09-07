@@ -480,10 +480,11 @@ void loop()
     if (vbat < LOBAT_THRESHOLD)
       u8g2.drawStr(88,12,"LoBat!");
     else {
-      u8g2.drawStr(106,12,"vBat"); //1075us
-      u8g2.setCursor(80,12); u8g2.print(vbat); //1167us
+      u8g2.setFont(u8g2_font_battery19_tn);
+      u8g2.drawGlyph(120, 19, '0' + min(5,(int)((vbat - LOBAT_THRESHOLD)/0.13)));
     }
 
+    u8g2.setFont(u8g2_font_6x12_tf); //7us
     if (AUTORANGE)
     {
       u8g2.drawStr(0,12, analog_ref_half ? "AUTO\xb7\xbd" : "AUTO");
@@ -547,7 +548,7 @@ void handleTouchPads() {
   if (MA_PRESSED && UA_PRESSED && NA_NOT_PRESSED && millis()-offsetInterval>1000) { toggleOffset(); Beep(3, false); }
 
   //AUTORANGE toggling
-  if (MA_PRESSED && NA_PRESSED && UA_NOT_PRESSED && millis()-autorangeInterval>1000) { toggleAutoranging(); Beep(20, false); delay(50); (20, false); }
+  if (MA_PRESSED && NA_PRESSED && UA_NOT_PRESSED && millis()-autorangeInterval>1000) { toggleAutoranging(); Beep(20, false); delay(50); Beep(20, false); }
 }
 
 void rangeMA() {
