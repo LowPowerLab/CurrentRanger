@@ -18,7 +18,6 @@
 #include <FlashStorage.h>          //for emulated EEPROM - https://github.com/cmaglie/FlashStorage
 #include <Adafruit_FreeTouch.h>    //https://github.com/adafruit/Adafruit_FreeTouch
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
-//#include <ATSAMD21_ADC.h>
 //***********************************************************************************************************
 #define BIAS_LED       11
 #define LPFPIN         4
@@ -40,12 +39,6 @@
 #define SENSE_GNDISO           A2
 #define SENSE_VIN              A5
 #define ADC_PRESCALER          ADC_CTRLB_PRESCALER_DIV16
-//#define ADC_AVGCTRL            ADC_AVGCTRL_SAMPLENUM_128 | ADC_AVGCTRL_ADJRES(0x4ul)
-                               //ADC_AVGCTRL_SAMPLENUM_1 | ADC_AVGCTRL_ADJRES(0x00ul);  // take 1 sample, adjusting result by 0
-                               //ADC_AVGCTRL_SAMPLENUM_16 | ADC_AVGCTRL_ADJRES(0x4ul); //take 16 samples adjust by 4
-                               //ADC_AVGCTRL_SAMPLENUM_256 | ADC_AVGCTRL_ADJRES(0x4ul); //take 256 samples adjust by 4
-                               //ADC_AVGCTRL_SAMPLENUM_512 | ADC_AVGCTRL_ADJRES(0x4ul); //take 512 samples adjust by 4
-                               //ADC_AVGCTRL_SAMPLENUM_1024 | ADC_AVGCTRL_ADJRES(0x4ul); //take 1024 samples adjust by 4
 #define ADC_SAMPCTRL           0b111 //sample timing [fast 0..0b111 slow]
 #define ADCFULLRANGE           4095.0
 #define VBATREADLOOPS          100  //read vbat every this many OLED_REFRESH_INTERVAL loops
@@ -61,13 +54,22 @@
 #define LDO_DEFAULT                 3.300 //volts, change to actual LDO output (measure GND-3V on OLED header)
 //***********************************************************************************************************
 #define BUZZER    1   // BUZZER pin
+#define NOTE_C4   262
+#define NOTE_D4   294
+#define NOTE_E4   330
+#define NOTE_F4   349
+#define NOTE_G4   392
+#define NOTE_A4   440
+#define NOTE_B4   494
 #define NOTE_C5   523
 #define NOTE_D5   587
 #define NOTE_E5   659
 #define NOTE_F5   698
 #define NOTE_G5   784
+#define NOTE_A5   880
 #define NOTE_B5   988
 #define NOTE_C6   1047
+#define NOTE_D6   1175
 #define TONE_BEEP 4200
 //***********************************************************************************************************
 #define MODE_MANUAL                 0
@@ -111,10 +113,17 @@ Adafruit_FreeTouch qt[3] = {
 #define LOGGING_FORMAT_MILLIS   3 //ex: 1234 = 1.234A = 1234000uA = 1234000000nA
 #define LOGGING_FORMAT_ADC      4 //raw output for each range (0..4095)
 //***********************************************************************************************************
-#define ADC_SAMPLING_SPEED_AVG   0
-#define ADC_SAMPLING_SPEED_FAST  1
-#define ADC_SAMPLING_SPEED_SLOW  2
+#define PREFERENCE_MU_SAMPLERATE 0x01  // default BIAS
+#define PREFERENCE_USB_TIMESTAMP 0x02  // timestamp serial samples
+#define PREFERENCE_BT_TIMESTAMP 0x04   // timestamp bluetooth samples
 //***********************************************************************************************************
+static const char *const loggingFormat_str[] = {
+  [LOGGING_FORMAT_EXPONENT] = "exp (1.23E-3 = 123 mA)",
+  [LOGGING_FORMAT_NANOS] = "nA (1234 = 1.234 uA)",
+  [LOGGING_FORMAT_MICROS] = "uA (1234 = 1.234 mA)",
+  [LOGGING_FORMAT_MILLIS] = "mA (1234 = 1.234 A)",
+  [LOGGING_FORMAT_ADC] = "adc (0..4095)",
+};
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 float ldoValue = 0, ldoOptimized=0;
@@ -124,8 +133,8 @@ uint8_t TOUCH_DEBUG_ENABLED = false;
 uint8_t GPIO_HEADER_RANGING = false;
 uint8_t BT_LOGGING_ENABLED = true;
 uint8_t LOGGING_FORMAT = LOGGING_FORMAT_EXPONENT;
-uint16_t ADC_SAMPLING_SPEED = ADC_SAMPLING_SPEED_AVG;
-uint32_t ADC_AVGCTRL;
+uint8_t ADC_SAMPLEN = 0;
+uint8_t ADC_AVGCTRL;
 uint8_t calibrationPerformed=false;
 uint8_t analog_ref_half=true;
 char rangeUnit = 'm';
@@ -135,12 +144,14 @@ uint8_t autoffBuzz=0;
 #ifdef BT_SERIAL_EN
   uint8_t BT_found=false;
 #endif
+uint8_t PREFERENCES;
 FlashStorage(eeprom_ADCoffset, int);
 FlashStorage(eeprom_ADCgain, uint16_t);
 FlashStorage(eeprom_LDO, float);
 FlashStorage(eeprom_AUTOFF, uint16_t);
 FlashStorage(eeprom_LOGGINGFORMAT, uint8_t);
-FlashStorage(eeprom_ADCSAMPLINGSPEED, uint8_t);
+FlashStorage(eeprom_ADCSAMPLEN, uint8_t);
+FlashStorage(eeprom_PREFERENCES, uint8_t);
 //***********************************************************************************************************
 
 void setup() {
@@ -213,8 +224,10 @@ void setup() {
     saveLDO(LDO_DEFAULT);
   else ldoOptimizeRefresh();
 
-  ADC_SAMPLING_SPEED = eeprom_ADCSAMPLINGSPEED.read();
+  ADC_SAMPLEN = eeprom_ADCSAMPLEN.read();
   refreshADCSamplingSpeed(); //load correct value into ADC_AVGCTRL
+
+  PREFERENCES = eeprom_PREFERENCES.read();
 
   if (gainCorrectionValue!=0) //check if anything saved in EEPROM (gain changed via SerialUSB +/-)
     analogReadCorrectionForced(offsetCorrectionValue, gainCorrectionValue);
@@ -282,16 +295,49 @@ void setup() {
   if (STARTUP_MODE == MODE_AUTORANGE) toggleAutoranging();
 }
 
-uint32_t oledInterval=0, lpfInterval=0, offsetInterval=0, autorangeInterval=0, btInterval=0,
+uint32_t oledInterval=0, lpfInterval=0, modeInterval=0, autorangeInterval=0, btInterval=0,
          autoOffBuzzInterval=0, touchSampleInterval=0, lastRangeChange=0;
-byte LPF=0, BIAS=0, AUTORANGE=0;
+byte LPF=0, BIAS=0, AUTORANGE=0, SRADJUST=0;
 byte readVbatLoop=0;
 float vbat=0, VOUT=0;
+unsigned long readMicros;
 float read1=0,read2=0,readDiff=0;
 bool rangeSwitched=false;
 #define RANGE_MA rangeUnit=='m'
 #define RANGE_UA rangeUnit=='u'
 #define RANGE_NA rangeUnit=='n'
+
+const char *sampleRateStr(bool changing = false)
+{
+  static const char samplerate_id[] = "H987654321L";
+  static char buf[3];
+  char *bp = buf;
+  *bp++ = samplerate_id[ADC_SAMPLEN];
+  if (changing) {
+    *bp++ = '?';
+  }
+  *bp = 0;
+  return buf;
+}
+
+void sampleRateOutSerial()
+{
+  Serial.print(sampleRateStr());
+  Serial.print(" (div ");
+  Serial.print(1U << ADC_SAMPLEN);
+  Serial.println(")");
+}
+
+void sampleRateBeep()
+{
+  static const uint16_t freq_Hz[] = {
+    NOTE_D6, NOTE_C6, NOTE_B5, NOTE_A5, NOTE_G5,
+    NOTE_F5, NOTE_E5, NOTE_D5, NOTE_C5, NOTE_B4,
+    NOTE_A4,
+  };
+  tone(BUZZER, freq_Hz[ADC_SAMPLEN], 200);
+  delay(100);
+}
 
 void rangeBeep(uint16_t switch_delay=0)
 {
@@ -307,39 +353,127 @@ void rangeBeep(uint16_t switch_delay=0)
   }
 }
 
+bool sampleRateAdjust(int8_t delta)
+{
+  // delta is positive to increase sample rate = decrease oversample rate
+  bool ok = ((ADC_SAMPLEN - delta) >= ADC_AVGCTRL_SAMPLENUM_1_Val)
+    && ((ADC_SAMPLEN - delta) <= ADC_AVGCTRL_SAMPLENUM_1024_Val);
+  if (ok) {
+    ADC_SAMPLEN -= delta;
+    refreshADCSamplingSpeed();
+  }
+  return ok;
+}
+
 void loop()
 {
   uint32_t timestamp=micros();
   if (Serial.available()>0)
   {
+    #define MODE_DISABLED 0
+    #define MODE_GAIN 1
+    #define MODE_LDO 2
+    #define MODE_SAMPLEN 3
+    static char mode;
+    
     char inByte = Serial.read();
     switch (inByte)
     {
+      case '!':
+        if (mode) {
+          mode = 0;
+          Serial.println("exit mode");
+        }
+        break;
+      case 'G':
+        if (mode == MODE_DISABLED) {
+          mode = MODE_GAIN;
+          Serial.println("gain adj mode");
+        }
+        break;
+      case 'L':
+        if (mode == MODE_DISABLED) {
+          mode = MODE_LDO;
+          Serial.println("ldo adj mode");
+        }
+        break;
+      case 'S':
+        if (mode == MODE_DISABLED) {
+          mode = MODE_SAMPLEN;
+          Serial.print("samplerate adj mode: start ");
+          sampleRateOutSerial();
+        }
+        break;
       case '+':
-        eeprom_ADCgain.write(++gainCorrectionValue);
-        analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
-        Serial.print("new gainCorrectionValue = ");
-        Serial.println(gainCorrectionValue);
+        switch (mode) {
+          case MODE_GAIN:
+            eeprom_ADCgain.write(++gainCorrectionValue);
+            analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
+            Serial.print("new gainCorrectionValue = ");
+            Serial.println(gainCorrectionValue);
+            break;
+          case MODE_LDO:          
+            saveLDO(ldoValue+0.001);
+            Serial.print("new LDO_Value = ");
+            Serial.println(ldoValue, 3);
+            break;
+          case MODE_SAMPLEN:
+            if (sampleRateAdjust(1)) {
+              sampleRateOutSerial();
+              eeprom_ADCSAMPLEN.write(ADC_SAMPLEN);
+            } else {
+              Serial.println("at upper limit");
+            }
+            break;
+          default:
+            Serial.println("no mode selected");
+            break;
+        }
         break;
       case '-':
-        eeprom_ADCgain.write(--gainCorrectionValue);
-        analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
-        Serial.print("new gainCorrectionValue = ");
-        Serial.println(gainCorrectionValue);
+        switch (mode) {
+          case MODE_GAIN:
+            eeprom_ADCgain.write(--gainCorrectionValue);
+            analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
+            Serial.print("new gainCorrectionValue = ");
+            Serial.println(gainCorrectionValue);
+            break;
+          case MODE_LDO:          
+            saveLDO(ldoValue-0.001);
+            Serial.print("new LDO_Value = ");
+            Serial.println(ldoValue, 3);
+            break;
+          case MODE_SAMPLEN:
+            if (sampleRateAdjust(-1)) {
+              sampleRateOutSerial();
+              eeprom_ADCSAMPLEN.write(ADC_SAMPLEN);
+            } else {
+              Serial.println("at lower limit");
+            }
+            break;
+          default:
+            Serial.println("no mode selected");
+            break;
+        }
         break;
-      case '<':
-        saveLDO(ldoValue-0.001);
-        Serial.print("new LDO_Value = ");
-        Serial.println(ldoValue, 3);
-        break;
-      case '>':
-        saveLDO(ldoValue+0.001);
-        Serial.print("new LDO_Value = ");
-        Serial.println(ldoValue, 3);
+      case 'o': //toggle touchpad bias mode/sample rate adjustment
+        PREFERENCES ^= PREFERENCE_MU_SAMPLERATE;
+        eeprom_PREFERENCES.write(PREFERENCES);
+        Serial.println((PREFERENCES & PREFERENCE_MU_SAMPLERATE)
+          ? "uA+mU toggle adjust sample rate"
+          : "uA+mU toggle offset mode");
         break;
       case 'u': //toggle USB logging
         USB_LOGGING_ENABLED =! USB_LOGGING_ENABLED;
         Serial.println(USB_LOGGING_ENABLED ? "USB_LOGGING_ENABLED" : "USB_LOGGING_DISABLED");
+        break;
+      case 'U': //toggle USB timestamping
+        PREFERENCES ^= PREFERENCE_USB_TIMESTAMP;
+        eeprom_PREFERENCES.write(PREFERENCES);
+        if (!(PREFERENCES & PREFERENCE_USB_TIMESTAMP)) {
+          Serial.print("NO ");
+        }
+        Serial.println("USB sample timestamps");
         break;
       case 't': //toggle touchpad serial output debug info
         TOUCH_DEBUG_ENABLED =! TOUCH_DEBUG_ENABLED;
@@ -358,22 +492,18 @@ void loop()
         BT_LOGGING_ENABLED =! BT_LOGGING_ENABLED;
         Serial.println(BT_LOGGING_ENABLED ? "BT_LOGGING_ENABLED" : "BT_LOGGING_DISABLED");
         break;
+      case 'B': //toggle BT timestamping
+        PREFERENCES ^= PREFERENCE_BT_TIMESTAMP;
+        eeprom_PREFERENCES.write(PREFERENCES);
+        if (!(PREFERENCES & PREFERENCE_BT_TIMESTAMP)) {
+          Serial.print("NO ");
+        }
+        Serial.println("BT sample timestamps");
+        break;
       case 'f': //cycle through output logging formats
         if (++LOGGING_FORMAT>LOGGING_FORMAT_ADC) LOGGING_FORMAT=LOGGING_FORMAT_EXPONENT;
         eeprom_LOGGINGFORMAT.write(LOGGING_FORMAT);
-        if (LOGGING_FORMAT==LOGGING_FORMAT_EXPONENT) Serial.println("LOGGING_FORMAT_EXPONENT"); else
-        if (LOGGING_FORMAT==LOGGING_FORMAT_NANOS) Serial.println("LOGGING_FORMAT_NANOS"); else
-        if (LOGGING_FORMAT==LOGGING_FORMAT_MICROS) Serial.println("LOGGING_FORMAT_MICROS"); else
-        if (LOGGING_FORMAT==LOGGING_FORMAT_MILLIS) Serial.println("LOGGING_FORMAT_MILLIS"); else
-        if (LOGGING_FORMAT==LOGGING_FORMAT_ADC) Serial.println("LOGGING_FORMAT_ADC");
-        break;
-      case 's':
-        if (++ADC_SAMPLING_SPEED>ADC_SAMPLING_SPEED_SLOW) ADC_SAMPLING_SPEED=ADC_SAMPLING_SPEED_AVG;
-        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_AVG) Serial.println("ADC_SAMPLING_SPEED_AVG"); else
-        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_FAST) Serial.println("ADC_SAMPLING_SPEED_FAST"); else
-        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_SLOW) Serial.println("ADC_SAMPLING_SPEED_SLOW");
-        eeprom_ADCSAMPLINGSPEED.write(ADC_SAMPLING_SPEED);
-        refreshADCSamplingSpeed();
+        Serial.println(loggingFormat_str[LOGGING_FORMAT]);
         break;
       case 'a': //toggle autoOff function
         if (AUTOFF_INTERVAL == AUTOFF_DEFAULT)
@@ -424,6 +554,9 @@ void loop()
     if (!AUTORANGE) readVOUT();
     VOUT = readDiff*ldoOptimized*(BIAS?1:OUTPUT_CALIB_FACTOR);
     VOUTCalculated=true;
+    if (PREFERENCES & PREFERENCE_USB_TIMESTAMP) {
+      Serial.print(readMicros); Serial.print(" ");
+    }
     if(LOGGING_FORMAT == LOGGING_FORMAT_EXPONENT) { Serial.print(VOUT); Serial.print("e"); Serial.println(RANGE_NA ? -9 : RANGE_UA ? -6 : -3); } else
     if(LOGGING_FORMAT == LOGGING_FORMAT_NANOS) Serial.println(VOUT * (RANGE_NA ? 1 : RANGE_UA ? 1000 : 1000000)); else
     if(LOGGING_FORMAT == LOGGING_FORMAT_MICROS) Serial.println(VOUT * (RANGE_NA ? 0.001 : RANGE_UA ? 1 : 1000)); else
@@ -444,6 +577,9 @@ void loop()
     if (!VOUTCalculated) {
       VOUT = readDiff*ldoOptimized*(BIAS?1:OUTPUT_CALIB_FACTOR);
       VOUTCalculated=true;
+    }
+    if (PREFERENCES & PREFERENCE_BT_TIMESTAMP) {
+      SerialBT.print(readMicros); SerialBT.print(" ");
     }
     if(LOGGING_FORMAT == LOGGING_FORMAT_EXPONENT) { SerialBT.print(VOUT); SerialBT.print("e"); SerialBT.println(RANGE_NA ? -9 : RANGE_UA ? -6 : -3); } else
     if(LOGGING_FORMAT == LOGGING_FORMAT_NANOS) SerialBT.println(VOUT * (RANGE_NA ? 1 : RANGE_UA ? 1000 : 1000000)); else
@@ -494,15 +630,19 @@ void loop()
     else u8g2.drawGlyph(115, 10, 0xE242); //u8g2.drawStr(88,12,"LoBat!");
 
     u8g2.setFont(u8g2_font_6x12_tf); //7us
+
+    // Display oversample exponent in hex
+    u8g2.drawStr(0,12, sampleRateStr(SRADJUST)); // ?? us
+
     if (AUTORANGE)
     {
-      u8g2.drawStr(0,12, analog_ref_half ? "AUTO\xb7\xbd" : "AUTO");
-      u8g2.setCursor(42,12); u8g2.print(readDiff,0);
+      u8g2.drawStr(12,12, analog_ref_half ? "AUTO\xb7\xbd" : "AUTO");
+      u8g2.setCursor(54,12); u8g2.print(readDiff,0);
     }
     else
     {
-      if (analog_ref_half) u8g2.drawStr(0,12,"\xbd");
-      u8g2.setCursor(12,12); u8g2.print(readDiff,0);
+      if (analog_ref_half) u8g2.drawStr(12,12,"\xbd");
+      u8g2.setCursor(24,12); u8g2.print(readDiff,0);
     }
 
     if (autoffBuzz) u8g2.drawStr(5,26,"* AUTO OFF! *"); //autoffWarning
@@ -547,18 +687,23 @@ void handleTouchPads() {
   if (MA_PRESSED || UA_PRESSED || NA_PRESSED) lastRangeChange=millis();
 
   //range switching
-  if (!AUTORANGE)
+  if (!AUTORANGE && !SRADJUST)
   {
     if (MA_PRESSED && !UA_PRESSED && !NA_PRESSED && rangeUnit!='m') { rangeMA(); rangeBeep(); }
     if (UA_PRESSED && !MA_PRESSED && !NA_PRESSED && rangeUnit!='u') { rangeUA(); rangeBeep(); }
     if (NA_PRESSED && !UA_PRESSED && !MA_PRESSED && rangeUnit!='n') { rangeNA(); rangeBeep(); }
+  } else if (!AUTORANGE) {
+    if (MA_PRESSED && !UA_PRESSED && !NA_PRESSED) { sampleRateAdjust(1); sampleRateBeep(); }
+    if (!MA_PRESSED && !UA_PRESSED && NA_PRESSED) { sampleRateAdjust(-1); sampleRateBeep(); }
   }
 
   //LPF activation --- [NA+UA]
   if (UA_PRESSED && NA_PRESSED && !MA_PRESSED && millis()-lpfInterval>1000) { toggleLPF(); Beep(3, false); }
 
-  //offset toggling (GNDISO to half supply) --- [MA+UA]
-  if (MA_PRESSED && UA_PRESSED && !NA_PRESSED && millis()-offsetInterval>1000) { toggleOffset(); Beep(3, false); }
+  //Alternate mode activation --- [MA+UA]
+  //  PREFERENCE_MU_SAMPLERATE : NA reduce sample rate, MA increase sample rate
+  //  !PREFERENCE_MU_SAMPLERATE : offset sampling (GNDISO to half supply)
+  if (MA_PRESSED && UA_PRESSED && !NA_PRESSED && millis()-modeInterval>1000) { toggleModeMU(); Beep(3, false); }
 
   //AUTORANGE toggling
   if (MA_PRESSED && NA_PRESSED && !UA_PRESSED && millis()-autorangeInterval>1000) { toggleAutoranging(); Beep(20, false); delay(50); Beep(20, false); }
@@ -647,10 +792,20 @@ void toggleLPF() {
 
 void toggleOffset() {
   BIAS=!BIAS;
-  offsetInterval = millis();
   analogWrite(A0, (BIAS ? DAC_HALF_SUPPLY_OFFSET : DAC_GND_ISO_OFFSET));
   digitalWrite(BIAS_LED, BIAS);
   if (AUTORANGE && BIAS) toggleAutoranging(); //turn off AUTORANGE
+}
+
+void toggleModeMU() {
+  modeInterval = millis();
+  if (PREFERENCES & PREFERENCE_MU_SAMPLERATE) {
+    SRADJUST=!SRADJUST;
+    Serial.print("sample rate adjust ");
+    Serial.println(SRADJUST ? "on" : "off");
+  } else {
+    toggleOffset();
+  }
 }
 
 void toggleAutoranging() {
@@ -692,6 +847,7 @@ void setupADC() {
 
 int adcRead(byte ADCpin) { return (int)analogRead(ADCpin); }
 void readVOUT() {
+  readMicros = micros();
   readDiff = adcRead(SENSE_OUTPUT) - adcRead(SENSE_GNDISO);
 
   if (!analog_ref_half && readDiff > RANGE_SWITCH_THRESHOLD_LOW && readDiff < RANGE_SWITCH_THRESHOLD_HIGH/3)
@@ -756,19 +912,9 @@ void saveLDO(float newLdoValue) {
 }
 
 void refreshADCSamplingSpeed() {
-  if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_AVG)
-    ADC_AVGCTRL = ADC_AVGCTRL_SAMPLENUM_64 | ADC_AVGCTRL_ADJRES(0x4ul);
-  else if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_FAST)
-    ADC_AVGCTRL = ADC_AVGCTRL_SAMPLENUM_16 | ADC_AVGCTRL_ADJRES(0x4ul); //take 16 samples adjust by 4
-  else if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_SLOW)
-    ADC_AVGCTRL = ADC_AVGCTRL_SAMPLENUM_256 | ADC_AVGCTRL_ADJRES(0x4ul); //take 512 samples adjust by 4
-  //other combinations:
-  //ADC_AVGCTRL_SAMPLENUM_128 | ADC_AVGCTRL_ADJRES(0x4ul)
-  //ADC_AVGCTRL_SAMPLENUM_1 | ADC_AVGCTRL_ADJRES(0x00ul);  // take 1 sample, adjusting result by 0
-  //ADC_AVGCTRL_SAMPLENUM_16 | ADC_AVGCTRL_ADJRES(0x4ul); //take 16 samples adjust by 4
-  //ADC_AVGCTRL_SAMPLENUM_256 | ADC_AVGCTRL_ADJRES(0x4ul); //take 256 samples adjust by 4
-  //ADC_AVGCTRL_SAMPLENUM_512 | ADC_AVGCTRL_ADJRES(0x4ul); //take 512 samples adjust by 4
-  //ADC_AVGCTRL_SAMPLENUM_1024 | ADC_AVGCTRL_ADJRES(0x4ul); //take 1024 samples adjust by 4
+  uint8_t adjres = (ADC_SAMPLEN < 4) ? ADC_SAMPLEN : 4;
+  ADC_AVGCTRL = ((ADC_SAMPLEN << ADC_AVGCTRL_SAMPLENUM_Pos) & ADC_AVGCTRL_SAMPLENUM_Msk)
+      | ((adjres << ADC_AVGCTRL_ADJRES_Pos) & ADC_AVGCTRL_ADJRES_Msk);
   setupADC();
 }
 
@@ -777,21 +923,38 @@ void printCalibInfo() {
   Serial.print("Offset="); Serial.println(offsetCorrectionValue);
   Serial.print("Gain="); Serial.println(gainCorrectionValue);
   Serial.print("LDO="); Serial.println(ldoValue,3);
+  Serial.print("SampleRate: "); sampleRateOutSerial();
+  Serial.print("LogFmt: "); Serial.println(loggingFormat_str[LOGGING_FORMAT]);
+  Serial.print("uA+mA: ");
+  Serial.println((PREFERENCES & PREFERENCE_MU_SAMPLERATE)
+          ? "toggle samplerate adjust"
+          : "toggle offset enable");
+  Serial.print("USB timestamp: ");
+  Serial.println((PREFERENCES & PREFERENCE_USB_TIMESTAMP)
+          ? "on" : "off");
+  Serial.print("BT timestamp: ");
+  Serial.println((PREFERENCES & PREFERENCE_BT_TIMESTAMP)
+          ? "on" : "off");
 }
 void printSerialMenu() {
   Serial.println("\r\nUSB serial commands:");
   Serial.println("a = toggle Auto-Off function");
   Serial.print  ("b = toggle BT/serial logging (");Serial.print(SERIAL_UART_BAUD);Serial.println("baud)");
-  Serial.println("f = cycle serial logging formats (exponent,nA,uA,mA/raw-ADC)");
+  Serial.println("B = toggle timestamp on BT/serial output [PREF]");
+  Serial.println("f = cycle serial logging formats (exponent,nA,uA,mA/raw-ADC) [PREF]");
   Serial.println("g = toggle GPIO range indication (SCK=mA,MISO=uA,MOSI=nA)");
-  Serial.println("s = cycle ADC sampling speeds (average,faster,slower)");
+  Serial.println("o = toggle touchpad offset (bias) / samplerate selection [PREF]");
   Serial.println("t = toggle touchpad serial output debug info");
   Serial.println("u = toggle USB/serial logging");
-  Serial.println("< = Calibrate LDO value (-1mV)");
-  Serial.println("> = Calibrate LDO value (+1mV)");
-  Serial.println("- = Calibrate GAIN value (-1)");
-  Serial.println("+ = Calibrate GAIN value (+1)");
+  Serial.println("U = toggle timestamp in USB/serial output [PREF]");
+  Serial.println("+ = increase mode value");
+  Serial.println("- = decrease mode value");
   Serial.println("? = Print this menu and calib info");
+  Serial.println("\r\nMode commands:");
+  Serial.println("G = gain calibration mode (1)");
+  Serial.println("L = ldo calibration mode (1 mV)");
+  Serial.println("S = sample rate");
+  Serial.println("! = exit mode");
   Serial.println();
 }
 
