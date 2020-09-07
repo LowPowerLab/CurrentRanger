@@ -93,12 +93,6 @@ Adafruit_FreeTouch qt[3] = {
   Adafruit_FreeTouch( TOUCH_M, OVERSAMPLE_1, RESISTOR_50K, FREQ_MODE_NONE ),
 };
 #define TOUCH_HIGH_THRESHOLD  400 //range is 0..1023
-#define MA_PRESSED            qt[2].measure()>TOUCH_HIGH_THRESHOLD
-#define MA_NOT_PRESSED        !(MA_PRESSED)
-#define UA_PRESSED            qt[1].measure()>TOUCH_HIGH_THRESHOLD
-#define UA_NOT_PRESSED        !(UA_PRESSED)
-#define NA_PRESSED            qt[0].measure()>TOUCH_HIGH_THRESHOLD
-#define NA_NOT_PRESSED        !(NA_PRESSED)
 #define TOUCH_SAMPLE_INTERVAL 50 //ms
 //***********************************************************************************************************
 #define SERIAL_UART_BAUD        230400      //Serial baud for HC-06/bluetooth output
@@ -544,6 +538,10 @@ void handleTouchPads() {
     Serial.println(qt[0].measure());
   }
 
+  bool MA_PRESSED = qt[2].measure()>TOUCH_HIGH_THRESHOLD;
+  bool UA_PRESSED = qt[1].measure()>TOUCH_HIGH_THRESHOLD;
+  bool NA_PRESSED = qt[0].measure()>TOUCH_HIGH_THRESHOLD;
+
   touchSampleInterval = millis();
 
   if (MA_PRESSED || UA_PRESSED || NA_PRESSED) lastRangeChange=millis();
@@ -551,19 +549,19 @@ void handleTouchPads() {
   //range switching
   if (!AUTORANGE)
   {
-    if (MA_PRESSED && UA_NOT_PRESSED && NA_NOT_PRESSED && rangeUnit!='m') { rangeMA(); rangeBeep(); }
-    if (UA_PRESSED && MA_NOT_PRESSED && NA_NOT_PRESSED && rangeUnit!='u') { rangeUA(); rangeBeep(); }
-    if (NA_PRESSED && UA_NOT_PRESSED && MA_NOT_PRESSED && rangeUnit!='n') { rangeNA(); rangeBeep(); }
+    if (MA_PRESSED && !UA_PRESSED && !NA_PRESSED && rangeUnit!='m') { rangeMA(); rangeBeep(); }
+    if (UA_PRESSED && !MA_PRESSED && !NA_PRESSED && rangeUnit!='u') { rangeUA(); rangeBeep(); }
+    if (NA_PRESSED && !UA_PRESSED && !MA_PRESSED && rangeUnit!='n') { rangeNA(); rangeBeep(); }
   }
-  
+
   //LPF activation --- [NA+UA]
-  if (UA_PRESSED && NA_PRESSED && MA_NOT_PRESSED && millis()-lpfInterval>1000) { toggleLPF(); Beep(3, false); }
+  if (UA_PRESSED && NA_PRESSED && !MA_PRESSED && millis()-lpfInterval>1000) { toggleLPF(); Beep(3, false); }
 
   //offset toggling (GNDISO to half supply) --- [MA+UA]
-  if (MA_PRESSED && UA_PRESSED && NA_NOT_PRESSED && millis()-offsetInterval>1000) { toggleOffset(); Beep(3, false); }
+  if (MA_PRESSED && UA_PRESSED && !NA_PRESSED && millis()-offsetInterval>1000) { toggleOffset(); Beep(3, false); }
 
   //AUTORANGE toggling
-  if (MA_PRESSED && NA_PRESSED && UA_NOT_PRESSED && millis()-autorangeInterval>1000) { toggleAutoranging(); Beep(20, false); delay(50); Beep(20, false); }
+  if (MA_PRESSED && NA_PRESSED && !UA_PRESSED && millis()-autorangeInterval>1000) { toggleAutoranging(); Beep(20, false); delay(50); Beep(20, false); }
 }
 
 void rangeMA() {
