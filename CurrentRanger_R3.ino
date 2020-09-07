@@ -1,4 +1,3 @@
-// *************************************************************************************************************
 // CurrentRanger(TM) stock firmware
 // https://lowpowerlab.com/CurrentRanger
 // CurrentRanger is a *high-side* precision current meter featuring:
@@ -19,6 +18,10 @@
 #include <Adafruit_FreeTouch.h>    //https://github.com/adafruit/Adafruit_FreeTouch
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
 //#include <ATSAMD21_ADC.h>
+
+// CurrentRanger Firmware Version 
+#define FW_VERSION "1.0.0"
+
 //***********************************************************************************************************
 #define BIAS_LED       11
 #define LPFPIN         4
@@ -102,8 +105,10 @@ Adafruit_FreeTouch qt[3] = {
 //#define LOGGER_FORMAT_ADC       //raw ADC output - note: automatic ADC_REF change
 #define BT_REFRESH_INTERVAL     200 //ms
 //***********************************************************************************************************
-#define AUTOFFBUZZDELAY         500 //ms
-#define AUTOFF_DEFAULT          600 //seconds, turn unit off after 10min of inactivity
+#define AUTOOFF_BUZZ_DELAY     500 //ms
+#define AUTOOFF_DEFAULT        600 //seconds, turn unit off after 10min of inactivity
+#define AUTOOFF_DISABLED       0xFFFF  // do not turn off
+#define AUTOOFF_SMART          0xFFFE  // turn off only if there is no BT or USB data logging
 //***********************************************************************************************************
 #define LOGGING_FORMAT_EXPONENT 0 //ex: 123E-3 = 123mA
 #define LOGGING_FORMAT_NANOS    1 //ex: 1234 = 1.234uA = 0.001234mA
@@ -115,10 +120,11 @@ Adafruit_FreeTouch qt[3] = {
 #define ADC_SAMPLING_SPEED_FAST  1
 #define ADC_SAMPLING_SPEED_SLOW  2
 //***********************************************************************************************************
+
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 float ldoValue = 0, ldoOptimized=0;
-uint16_t AUTOFF_INTERVAL = 0;
+uint16_t autooff_interval = 0;
 uint8_t USB_LOGGING_ENABLED = false;
 uint8_t TOUCH_DEBUG_ENABLED = false;
 uint8_t GPIO_HEADER_RANGING = false;
@@ -197,10 +203,10 @@ void setup() {
   //DAC->CTRLB.bit.REFSEL=0;//pick internal reference, skip SYNCDAC (done by analogWrite)
   analogWrite(A0, DAC_GND_ISO_OFFSET);  // Initialize Dac to OFFSET
 
-  AUTOFF_INTERVAL = eeprom_AUTOFF.read();
-  if (AUTOFF_INTERVAL==0) {
-    AUTOFF_INTERVAL = AUTOFF_DEFAULT;
-    eeprom_AUTOFF.write(AUTOFF_INTERVAL);
+  autooff_interval = eeprom_AUTOFF.read();
+  if (autooff_interval==0) {
+    autooff_interval = AUTOOFF_DEFAULT;
+    eeprom_AUTOFF.write(autooff_interval);
   }
 
   LOGGING_FORMAT = eeprom_LOGGINGFORMAT.read();
@@ -230,14 +236,16 @@ void setup() {
   {
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_8x13B_tf);
-    u8g2.setCursor(15,14); u8g2.print("CurrentRanger");
+    u8g2.setCursor(15,14); u8g2.print("CurrentRanger");  
     u8g2.setFont(u8g2_font_6x12_tf);
     u8g2.setCursor(0,28); u8g2.print("Offset:");
     u8g2.setCursor(64,28); u8g2.print(offsetCorrectionValue);
-    u8g2.setCursor(0,42); u8g2.print("Gain  :");
-    u8g2.setCursor(64,42); u8g2.print(gainCorrectionValue);
-    u8g2.setCursor(0,56); u8g2.print("LDO   :");
-    u8g2.setCursor(64,56); u8g2.print(ldoValue,3);
+    u8g2.setCursor(0,40); u8g2.print("Gain  :");
+    u8g2.setCursor(64,40); u8g2.print(gainCorrectionValue);
+    u8g2.setCursor(0,52); u8g2.print("LDO   :");
+    u8g2.setCursor(64,52); u8g2.print(ldoValue,3);
+    u8g2.setCursor(0, 64); u8g2.print("Firmware:");
+    u8g2.setCursor(64,64); u8g2.print(FW_VERSION);
     u8g2.sendBuffer();
     delay(2000);
   }
@@ -274,16 +282,18 @@ void setup() {
   
     Serial.println(BT_found?"OK!":"No response.");
   }
+
+  BT_LOGGING_ENABLED = BT_found;
+  
 #endif
 
-  printCalibInfo();
   printSerialMenu();
   WDTset();
   if (STARTUP_MODE == MODE_AUTORANGE) toggleAutoranging();
 }
 
 uint32_t oledInterval=0, lpfInterval=0, offsetInterval=0, autorangeInterval=0, btInterval=0,
-         autoOffBuzzInterval=0, touchSampleInterval=0, lastRangeChange=0;
+         autoOffBuzzInterval=0, touchSampleInterval=0, lastKeepAlive=0;
 byte LPF=0, BIAS=0, AUTORANGE=0;
 byte readVbatLoop=0;
 float vbat=0, VOUT=0;
@@ -313,6 +323,10 @@ void loop()
   if (Serial.available()>0)
   {
     char inByte = Serial.read();
+
+    // tickle the AUTOOFF function so it doesn't shut down when there are commands coming over serial
+    lastKeepAlive = millis();
+    
     switch (inByte)
     {
       case '+':
@@ -355,8 +369,17 @@ void loop()
         Serial.println(GPIO_HEADER_RANGING ? "GPIO_HEADER_RANGING_ENABLED" : "GPIO_HEADER_RANGING_DISABLED");
         break;
       case 'b': //toggle BT/serial logging
-        BT_LOGGING_ENABLED =! BT_LOGGING_ENABLED;
-        Serial.println(BT_LOGGING_ENABLED ? "BT_LOGGING_ENABLED" : "BT_LOGGING_DISABLED");
+#ifdef BT_SERIAL_EN      
+        if (BT_found) {
+          BT_LOGGING_ENABLED =! BT_LOGGING_ENABLED;
+          Serial.println(BT_LOGGING_ENABLED ? "BT_LOGGING_ENABLED" : "BT_LOGGING_DISABLED");
+        } else {
+          BT_LOGGING_ENABLED = false;
+          Serial.println("BT Module not found: cannot enable logging");
+        }
+#else
+        Serial.println("BT_LOGGING Not Enabled");
+#endif
         break;
       case 'f': //cycle through output logging formats
         if (++LOGGING_FORMAT>LOGGING_FORMAT_ADC) LOGGING_FORMAT=LOGGING_FORMAT_EXPONENT;
@@ -376,21 +399,23 @@ void loop()
         refreshADCSamplingSpeed();
         break;
       case 'a': //toggle autoOff function
-        if (AUTOFF_INTERVAL == AUTOFF_DEFAULT)
+        if (autooff_interval == AUTOOFF_DEFAULT)
         {
-          Serial.println("AUTO_OFF_DISABLED");
-          AUTOFF_INTERVAL = 0xFFFF;
+          Serial.println("AUTOOFF_DISABLED");
+          autooff_interval = AUTOOFF_DISABLED;
         }
-        else
-        {
-          Serial.println("AUTO_OFF_ENABLED");
-          AUTOFF_INTERVAL = AUTOFF_DEFAULT;
-          lastRangeChange = millis();
+        else if (autooff_interval == AUTOOFF_SMART) {
+          Serial.println("AUTOOFF_DEFAULT");
+          autooff_interval = AUTOOFF_DEFAULT;
+          lastKeepAlive = millis();          
+        } else {
+          // turn off only when there is no serial or BT data logging
+          Serial.println("AUTOOFF_SMART");
+          autooff_interval = AUTOOFF_SMART;
         }
-        eeprom_AUTOFF.write(AUTOFF_INTERVAL);
+        eeprom_AUTOFF.write(autooff_interval);
         break;
       case '?':
-        printCalibInfo();
         printSerialMenu();
         break;
       default: break;
@@ -412,7 +437,7 @@ void loop()
       else if (RANGE_UA) { rangeMA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_UP); }
     }
     if (rangeSwitched) {
-      lastRangeChange=millis();
+      lastKeepAlive=millis();
       rangeSwitched=false;
       return; //!!!
     }
@@ -432,8 +457,7 @@ void loop()
   }
 
 #ifdef BT_SERIAL_EN
-  if (BT_found && BT_LOGGING_ENABLED && millis() - btInterval > BT_REFRESH_INTERVAL) //refresh rate (ms)
-  {
+  if (BT_LOGGING_ENABLED) {
     if (OLED_found) {
       u8g2.setFont(u8g2_font_siji_t_6x10); //https://github.com/olikraus/u8g2/wiki/fntgrpsiji
       u8g2.drawGlyph(104, 10, 0xE00B); //BT icon
@@ -544,7 +568,7 @@ void handleTouchPads() {
 
   touchSampleInterval = millis();
 
-  if (MA_PRESSED || UA_PRESSED || NA_PRESSED) lastRangeChange=millis();
+  if (MA_PRESSED || UA_PRESSED || NA_PRESSED) lastKeepAlive=millis();
 
   //range switching
   if (!AUTORANGE)
@@ -613,11 +637,14 @@ void rangeNA() {
 }
 
 void handleAutoOff() {
-  if (millis() - lastRangeChange > uint32_t(AUTOFF_INTERVAL)*1000-5000)
+
+  uint32_t autooff_deadline = uint32_t((autooff_interval == AUTOOFF_SMART && !(USB_LOGGING_ENABLED || BT_LOGGING_ENABLED))?AUTOOFF_DEFAULT:autooff_interval)*1000;
+  
+  if (millis() - lastKeepAlive > autooff_deadline - 5*1000)
   {
     autoffWarning = true;
 
-    if (millis()-autoOffBuzzInterval> AUTOFFBUZZDELAY)
+    if (millis()-autoOffBuzzInterval> AUTOOFF_BUZZ_DELAY)
     {
       autoOffBuzzInterval = millis();
       autoffBuzz=!autoffBuzz;
@@ -628,7 +655,7 @@ void handleAutoOff() {
         noTone(BUZZER);
     }
 
-    if (millis() - lastRangeChange > uint32_t(AUTOFF_INTERVAL)*1000)
+    if (millis() - lastKeepAlive > autooff_deadline)
     {
       pinMode(AUTOFF, OUTPUT);
       digitalWrite(AUTOFF, LOW);
@@ -773,14 +800,38 @@ void refreshADCSamplingSpeed() {
 }
 
 void printCalibInfo() {
-  Serial.println("\r\nADC calib. values:");
+  Serial.println("\r\nADC calibration values:");
   Serial.print("Offset="); Serial.println(offsetCorrectionValue);
   Serial.print("Gain="); Serial.println(gainCorrectionValue);
   Serial.print("LDO="); Serial.println(ldoValue,3);
+
+  
+  Serial.println("\r\nEEPROM Settings:");
+  Serial.print("LoggingFormat="); Serial.println(LOGGING_FORMAT); 
+  Serial.print("ADCSamplingSpeed="); Serial.println(ADC_SAMPLING_SPEED); 
+  Serial.print("AutoOff="); 
+    if (autooff_interval == AUTOOFF_DISABLED) {
+      Serial.println("DISABLED");
+    } else if (autooff_interval == AUTOOFF_SMART) {
+      Serial.println("SMART");
+    } else {
+      Serial.println(autooff_interval);
+    }
+
+  Serial.println("");
 }
+
 void printSerialMenu() {
-  Serial.println("\r\nUSB serial commands:");
-  Serial.println("a = toggle Auto-Off function");
+
+  // Print device name, firmware version and state for interop on PC side
+  Serial.println("\r\nCurrentRanger R3");  
+  Serial.print("Firmware version: "); Serial.println(FW_VERSION);  
+  Serial.print("BT Logging: "); Serial.println(BT_LOGGING_ENABLED);
+  Serial.print("USB Logging: "); Serial.println(USB_LOGGING_ENABLED); 
+
+  printCalibInfo();
+  
+  Serial.println("a = cycle Auto-Off function");
   Serial.print  ("b = toggle BT/serial logging (");Serial.print(SERIAL_UART_BAUD);Serial.println("baud)");
   Serial.println("f = cycle serial logging formats (exponent,nA,uA,mA/raw-ADC)");
   Serial.println("g = toggle GPIO range indication (SCK=mA,MISO=uA,MOSI=nA)");
