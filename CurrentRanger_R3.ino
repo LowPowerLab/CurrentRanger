@@ -232,7 +232,7 @@ void setup() {
     //               - offset is 12bit 2s complement format (DS p896)
   }
 
-  if (OLED_found /*&& !calibrationPerformed && MA_PRESSED*/)
+  if (OLED_found)
   {
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_8x13B_tf);
@@ -440,6 +440,11 @@ void loop()
 #ifdef BT_SERIAL_EN
   if (BT_found && BT_LOGGING_ENABLED && millis() - btInterval > BT_REFRESH_INTERVAL) //refresh rate (ms)
   {
+    if (OLED_found) {
+      u8g2.setFont(u8g2_font_siji_t_6x10); //https://github.com/olikraus/u8g2/wiki/fntgrpsiji
+      u8g2.drawGlyph(104, 10, 0xE00B); //BT icon
+    }
+
     btInterval = millis();
     if (!AUTORANGE) readVOUT();
     if (!VOUTCalculated) {
@@ -477,12 +482,22 @@ void loop()
     if (readVbatLoop == VBATREADLOOPS) readVbatLoop=0;
     else readVbatLoop++;
 
-    if (vbat < LOBAT_THRESHOLD)
-      u8g2.drawStr(88,12,"LoBat!");
-    else {
-      u8g2.setFont(u8g2_font_battery19_tn);
-      u8g2.drawGlyph(120, 19, '0' + min(5,(int)((vbat - LOBAT_THRESHOLD)/0.13)));
-    }
+    u8g2.setFont(u8g2_font_siji_t_6x10);
+    if (vbat>4.3)
+      u8g2.drawGlyph(115, 10, 0xE23A); //charging!
+    else if(vbat>4.1)
+      u8g2.drawGlyph(115, 10, 0xE24B); //100%
+    else if(vbat>3.95)
+      u8g2.drawGlyph(115, 10, 0xE249); //80%
+    else if(vbat>3.85)
+      u8g2.drawGlyph(115, 10, 0xE247); //60%
+    else if(vbat>3.75)
+      u8g2.drawGlyph(115, 10, 0xE245); //40%
+    else if(vbat>3.65)
+      u8g2.drawGlyph(115, 10, 0xE244); //20%
+    else if(vbat>LOBAT_THRESHOLD)
+      u8g2.drawGlyph(115, 10, 0xE243); //5%!
+    else u8g2.drawGlyph(115, 10, 0xE242); //u8g2.drawStr(88,12,"LoBat!");
 
     u8g2.setFont(u8g2_font_6x12_tf); //7us
     if (AUTORANGE)
