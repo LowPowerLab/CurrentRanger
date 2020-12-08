@@ -251,6 +251,7 @@ void setup() {
 #ifdef BT_SERIAL_EN
   //BT check
   Serial.print("Bluetooth AT check @");Serial.print(SERIAL_UART_BAUD);Serial.print("baud...");
+  delay(600);
   SerialBT.begin(SERIAL_UART_BAUD);
   SerialBT.print("AT"); //assuming HC-06, no line ending required
   uint32_t timer=millis();
