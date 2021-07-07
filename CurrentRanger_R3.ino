@@ -20,7 +20,7 @@
 //#include <ATSAMD21_ADC.h>
 
 // CurrentRanger Firmware Version
-#define FW_VERSION "1.1.0"
+#define FW_VERSION "1.1.1"
 
 //***********************************************************************************************************
 #define BIAS_LED       11
@@ -120,7 +120,6 @@ Adafruit_FreeTouch qt[3] = {
 #define ADC_SAMPLING_SPEED_FAST  1
 #define ADC_SAMPLING_SPEED_SLOW  2
 //***********************************************************************************************************
-
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 float ldoValue = 0, ldoOptimized=0;
@@ -278,7 +277,7 @@ void setup() {
         break;
       }
     }
-  
+
     Serial.println(BT_found?"OK!":"No response.");
   }
 
@@ -309,25 +308,25 @@ void loop() {
     lastKeepAlive = millis();
 
     switch (inByte) {
-      case '*':
+      case '+':
         eeprom_ADCgain.write(++gainCorrectionValue);
         analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
         Serial.print("new gainCorrectionValue = ");
         Serial.println(gainCorrectionValue);
         break;
-      case '/':
+      case '-':
         eeprom_ADCgain.write(--gainCorrectionValue);
         analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
         Serial.print("new gainCorrectionValue = ");
         Serial.println(gainCorrectionValue);
         break;
-      case '+':
+      case '*':
         eeprom_ADCoffset.write(++offsetCorrectionValue);
         analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
         Serial.print("new offsetCorrectionValue = ");
         Serial.println(offsetCorrectionValue);
         break;
-      case '-':
+      case '/':
         eeprom_ADCoffset.write(--offsetCorrectionValue);
         analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
         Serial.print("new offsetCorrectionValue = ");
@@ -366,7 +365,7 @@ void loop() {
         Serial.println(GPIO_HEADER_RANGING ? "GPIO_HEADER_RANGING_ENABLED" : "GPIO_HEADER_RANGING_DISABLED");
         break;
       case 'b': //toggle BT/serial logging
-#ifdef BT_SERIAL_EN      
+#ifdef BT_SERIAL_EN
         if (BT_found) {
           BT_LOGGING_ENABLED =! BT_LOGGING_ENABLED;
           Serial.println(BT_LOGGING_ENABLED ? "BT_LOGGING_ENABLED" : "BT_LOGGING_DISABLED");
@@ -412,6 +411,12 @@ void loop() {
         }
         eeprom_AUTOFF.write(autooff_interval);
         break;
+      case '1': if (AUTORANGE) toggleAutoranging(); rangeMA(); break;
+      case '2': if (AUTORANGE) toggleAutoranging(); rangeUA(); break;
+      case '3': if (AUTORANGE) toggleAutoranging(); rangeNA(); break;
+      case '4': toggleLPF(); break;
+      case '5': toggleOffset(); break;
+      case '6': toggleAutoranging(); break;
       case '?':
         printSerialMenu();
         break;
@@ -673,6 +678,7 @@ void toggleOffset() {
   analogWrite(A0, (BIAS ? DAC_HALF_SUPPLY_OFFSET : DAC_GND_ISO_OFFSET));
   digitalWrite(BIAS_LED, BIAS);
   if (AUTORANGE && BIAS) toggleAutoranging(); //turn off AUTORANGE
+  analogReferenceHalf(!BIAS);
 }
 
 void toggleAutoranging() {
@@ -808,7 +814,6 @@ void printCalibInfo() {
   Serial.print("Gain="); Serial.println(gainCorrectionValue);
   Serial.print("LDO="); Serial.println(ldoValue,3);
 
-  
   Serial.println("\r\nEEPROM Settings:");
   Serial.print("LoggingFormat="); Serial.println(LOGGING_FORMAT); 
   Serial.print("ADCSamplingSpeed="); Serial.println(ADC_SAMPLING_SPEED); 
@@ -820,16 +825,15 @@ void printCalibInfo() {
     } else {
       Serial.println(autooff_interval);
     }
-
-  Serial.println("");
+  Serial.print("BT Logging: "); Serial.println(BT_LOGGING_ENABLED);
+  Serial.print("USB Logging: "); Serial.println(USB_LOGGING_ENABLED); 
+  Serial.println();
 }
 
 void printSerialMenu() {
   // Print device name, firmware version and state for interop on PC side
-  Serial.println("\r\nCurrentRanger R3");  
-  Serial.print("Firmware version: "); Serial.println(FW_VERSION);  
-  Serial.print("BT Logging: "); Serial.println(BT_LOGGING_ENABLED);
-  Serial.print("USB Logging: "); Serial.println(USB_LOGGING_ENABLED); 
+  Serial.print("\r\nCurrentRanger R3 (");  
+  Serial.print("firmware v. "); Serial.print(FW_VERSION); Serial.println(")");
 
   printCalibInfo();
 
@@ -843,15 +847,22 @@ void printSerialMenu() {
   Serial.println("u = toggle USB/serial logging");
   Serial.println("< = Calibrate LDO value (-1mV)");
   Serial.println("> = Calibrate LDO value (+1mV)");
-  Serial.println("* = Calibrate GAIN value (+1)");
-  Serial.println("/ = Calibrate GAIN value (-1)");
-  Serial.println("+ = Calibrate OFFSET value (+1)");
-  Serial.println("- = Calibrate OFFSET value (-1)");
+  Serial.println("+ = Calibrate GAIN value (+1)");
+  Serial.println("- = Calibrate GAIN value (-1)");
+  Serial.println("* = Calibrate OFFSET value (+1)");
+  Serial.println("/ = Calibrate OFFSET value (-1)");
+  Serial.println("1 = range to MilliAmps (MA)");
+  Serial.println("2 = range to MicroAmps (UA)");
+  Serial.println("3 = range to NanoAmps (NA)");
+  Serial.println("4 = toggle Low Pass Filter (LPF)");
+  Serial.println("5 = toggle BIAS (disables AutoRanging)");
+  Serial.println("6 = toggle AutoRanging (disables BIAS)");
   Serial.println("? = Print this menu and calib info");
   Serial.println();
 }
 
 void analogReferenceHalf(uint8_t half) {
+  if (half && BIAS) return;
   analog_ref_half = half;
   analogReference(half ? AR_INTERNAL1V65 : AR_DEFAULT);
   ldoOptimizeRefresh();
