@@ -20,7 +20,7 @@
 //#include <ATSAMD21_ADC.h>
 
 // CurrentRanger Firmware Version
-#define FW_VERSION "1.1.1"
+#define FW_VERSION "1.1.2"
 
 //***********************************************************************************************************
 #define BIAS_LED       11
@@ -541,7 +541,7 @@ void handleVbatRead() {
   uint8_t half = analog_ref_half;
   if (half) analogReferenceHalf(false);
   vbat=adcRead(SENSE_VIN);
-  if (half) analogReferenceHalf(true);
+  analogReferenceHalf(half);
   vbat=((vbat/ADCFULLRANGE) * ldoValue) * 1.5; //1.5 given by vbat->A5 resistor ratio (1 / (2M * 1/(1M+2M))) 
 
 /*
@@ -678,7 +678,7 @@ void toggleOffset() {
   analogWrite(A0, (BIAS ? DAC_HALF_SUPPLY_OFFSET : DAC_GND_ISO_OFFSET));
   digitalWrite(BIAS_LED, BIAS);
   if (AUTORANGE && BIAS) toggleAutoranging(); //turn off AUTORANGE
-  analogReferenceHalf(!BIAS);
+  analogReferenceHalf(false);
 }
 
 void toggleAutoranging() {
@@ -730,15 +730,17 @@ int adcRead(byte ADCpin) {
 
 void readVOUT() {
   readDiff = adcRead(SENSE_OUTPUT) - adcRead(SENSE_GNDISO) + offsetCorrectionValue;
-  if (!analog_ref_half && readDiff > RANGE_SWITCH_THRESHOLD_LOW && readDiff < RANGE_SWITCH_THRESHOLD_HIGH/3)
-  {
-    analogReferenceHalf(true);
-    readVOUT();
-  }
-  else if (analog_ref_half && readDiff >= RANGE_SWITCH_THRESHOLD_HIGH)
-  {
-    analogReferenceHalf(false);
-    readVOUT();
+  if (!BIAS) {
+    if (!analog_ref_half && readDiff > RANGE_SWITCH_THRESHOLD_LOW && readDiff < RANGE_SWITCH_THRESHOLD_HIGH/3)
+    {
+      analogReferenceHalf(true);
+      readVOUT();
+    }
+    else if (analog_ref_half && readDiff >= RANGE_SWITCH_THRESHOLD_HIGH)
+    {
+      analogReferenceHalf(false);
+      readVOUT();
+    }
   }
 }
 
@@ -862,9 +864,10 @@ void printSerialMenu() {
 }
 
 void analogReferenceHalf(uint8_t half) {
-  if (half && BIAS) return;
-  analog_ref_half = half;
-  analogReference(half ? AR_INTERNAL1V65 : AR_DEFAULT);
+  if (half && BIAS) analog_ref_half = false;
+  else if (analog_ref_half == half) return;
+  else analog_ref_half = half;
+  analogReference(analog_ref_half ? AR_INTERNAL1V65 : AR_DEFAULT);
   ldoOptimizeRefresh();
 }
 
