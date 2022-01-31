@@ -3,7 +3,8 @@ Precision auto-ranging current meter (ammeter)
 
 ## [Please see the full guide and latest updates posted here.](https://lowpowerlab.com/guide/currentranger/)
 
-![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2018/09/Current_Ranger_R3_OLED.jpg)
+
+<img src="https://user-images.githubusercontent.com/3129069/151839737-368e8d28-bf22-45e2-aa62-133880360afb.png" width="600">
 
 ## Quick Highlights
 Here are some of the features of this instrument which sets it apart:
@@ -41,7 +42,7 @@ Here are some of the features of this instrument which sets it apart:
   - 100pA (3.5digit meter)
   - 10pA (4.5 digit meter)
   - 1pA (5.5 digit meter)
-* Cascaded MAX4239 amplifiers with 100x output gain
+* Cascaded ultra low offset/noise amplifiers with 100x output gain
   - Bandwidth: >300KHz (-3dB)
 
 ![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2019/05/Current_Ranger_R3_PCB_terminals.jpg)
