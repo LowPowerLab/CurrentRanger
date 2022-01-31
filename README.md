@@ -53,3 +53,9 @@ Sample no-load mA range comparison to µCurrent GOLD:
 Sample measurement of a [Moteino](https://lowpowerlab.com/guide/moteino/) waking up and transmitting a  RFM69 transceiver packet:
 
 ![CurrentRanger](https://lowpowerlab.com/wp-content/uploads/2018/09/CurrentRanger_LPF.gif)
+
+## OLED Case
+Kindly shared by MariusG, who has also designed the [CurrentViewer](https://github.com/MGX3D/CurrentViewer)
+![image](https://user-images.githubusercontent.com/3129069/151845049-51adbc4a-5e90-43df-8a66-7ec884a1154b.png)
+
+The model can be found [on Thingiverse](https://www.thingiverse.com/thing:4588111/files), and is also shared in this repository in SCAD parameter based format.
