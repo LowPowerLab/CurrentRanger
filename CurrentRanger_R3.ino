@@ -19,9 +19,10 @@
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
 //#include <ATSAMD21_ADC.h>
 
-// CurrentRanger Firmware Version
-#define FW_VERSION "1.1.2"
-
+#define FW_VERSION "1.1.3"         //firmware version
+// ********************** CHANGE LOG ***********************************************************************
+// 1.1.3 - BUGFIX - CR turns off after 21hrs when AUTO-OFF disabled
+// 1.1.2 - BUGFIX - BIAS MODE bug fix
 //***********************************************************************************************************
 #define BIAS_LED       11
 #define LPFPIN         4
@@ -107,7 +108,7 @@ Adafruit_FreeTouch qt[3] = {
 //***********************************************************************************************************
 #define AUTOOFF_BUZZ_DELAY     500 //ms
 #define AUTOOFF_DEFAULT        600 //seconds, turn unit off after 10min of inactivity
-#define AUTOOFF_DISABLED       0xFFFF  // do not turn off
+#define AUTOOFF_DISABLED       0xFFFFFFFF  // do not turn off
 #define AUTOOFF_SMART          0xFFFE  // turn off only if there is no BT or USB data logging
 //***********************************************************************************************************
 #define LOGGING_FORMAT_EXPONENT 0 //ex: 123E-3 = 123mA
@@ -123,7 +124,7 @@ Adafruit_FreeTouch qt[3] = {
 int offsetCorrectionValue = 0;
 uint16_t gainCorrectionValue = 0;
 float ldoValue = 0, ldoOptimized=0;
-uint16_t autooff_interval = 0;
+uint32_t autooff_interval = 0;
 uint8_t USB_LOGGING_ENABLED = false;
 uint8_t TOUCH_DEBUG_ENABLED = false;
 uint8_t GPIO_HEADER_RANGING = false;
@@ -143,7 +144,7 @@ uint8_t autoffBuzz=0;
 FlashStorage(eeprom_ADCoffset, int);
 FlashStorage(eeprom_ADCgain, uint16_t);
 FlashStorage(eeprom_LDO, float);
-FlashStorage(eeprom_AUTOFF, uint16_t);
+FlashStorage(eeprom_AUTOFF, uint32_t);
 FlashStorage(eeprom_LOGGINGFORMAT, uint8_t);
 FlashStorage(eeprom_ADCSAMPLINGSPEED, uint8_t);
 //***********************************************************************************************************
@@ -181,6 +182,7 @@ void setup() {
   pinMode(SENSE_GNDISO, INPUT); //GND-ISO
   pinMode(SENSE_VIN, INPUT); //VIN > 1MEG > SENSE_VIN > 2MEG > GND
   pinMode(AUTOFF, INPUT_PULLUP);
+  digitalWrite(AUTOFF, HIGH);
   pinMode(BIAS_LED, OUTPUT);
   pinMode(LPFLED, OUTPUT); //STATUS/LPF-LED
   pinMode(LPFPIN, OUTPUT); //LPF control pin
@@ -641,7 +643,7 @@ void rangeNA() {
 
 void handleAutoOff() {
   uint32_t autooff_deadline = uint32_t((autooff_interval == AUTOOFF_SMART && !(USB_LOGGING_ENABLED || BT_LOGGING_ENABLED))?AUTOOFF_DEFAULT:autooff_interval)*1000;
-  
+
   if (millis() - lastKeepAlive > autooff_deadline - 5*1000) {
     autoffWarning = true;
 
