@@ -19,8 +19,9 @@
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
 //#include <ATSAMD21_ADC.h>
 
-#define FW_VERSION "1.1.3"         //firmware version
+#define FW_VERSION "1.1.4"         //firmware version
 // ********************** CHANGE LOG ***********************************************************************
+// 1.1.4 - BUGFIX - USB logging values are half value when CR started without OLED, and until AUTORANGING is toggled
 // 1.1.3 - BUGFIX - CR turns off after 21hrs when AUTO-OFF disabled
 // 1.1.2 - BUGFIX - BIAS MODE bug fix
 //***********************************************************************************************************
@@ -133,7 +134,7 @@ uint8_t LOGGING_FORMAT = LOGGING_FORMAT_EXPONENT;
 uint16_t ADC_SAMPLING_SPEED = ADC_SAMPLING_SPEED_AVG;
 uint32_t ADC_AVGCTRL;
 uint8_t calibrationPerformed=false;
-uint8_t analog_ref_half=true;
+uint8_t analog_ref_half=false; //keep false to ensure we set the reference correctly
 char rangeUnit = 'm';
 uint8_t OLED_found=false;
 uint8_t autoffWarning=false;
@@ -196,6 +197,7 @@ void setup() {
 
   qt[0].begin(); qt[1].begin(); qt[2].begin(); //touch pads
   analogWriteResolution(10);  //DAC resolution
+  analogReferenceHalf(false); //call with FALSE then with TRUE to ensure transition and correct POR reference value
   analogReferenceHalf(true);
 
   //DAC->CTRLA.bit.RUNSTDBY = 0x01;delay(1);
@@ -405,7 +407,7 @@ void loop() {
         else if (autooff_interval == AUTOOFF_SMART) {
           Serial.println("AUTOOFF_DEFAULT");
           autooff_interval = AUTOOFF_DEFAULT;
-          lastKeepAlive = millis();          
+          lastKeepAlive = millis();
         } else {
           // turn off only when there is no serial or BT data logging
           Serial.println("AUTOOFF_SMART");
