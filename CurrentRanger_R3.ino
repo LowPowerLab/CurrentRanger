@@ -350,7 +350,7 @@ void loop() {
         Serial.print("\nRebooting to bootloader.");
         for (byte i=0;i++<30;) { delay(10); Serial.print('.'); }
         rebootIntoBootloader();
-        break;
+        break;        
       case 'u': //toggle USB logging
         USB_LOGGING_ENABLED =! USB_LOGGING_ENABLED;
         Serial.println(USB_LOGGING_ENABLED ? "USB_LOGGING_ENABLED" : "USB_LOGGING_DISABLED");
@@ -421,6 +421,49 @@ void loop() {
       case '4': toggleLPF(); break;
       case '5': toggleOffset(); break;
       case '6': toggleAutoranging(); break;
+
+      case '!': //reset runtime params
+        USB_LOGGING_ENABLED = false;
+        Serial.println("USB_LOGGING_DISABLED");
+
+        LOGGING_FORMAT=LOGGING_FORMAT_EXPONENT;
+        eeprom_LOGGINGFORMAT.write(LOGGING_FORMAT);
+        Serial.println("LOGGING_FORMAT_EXPONENT");
+        
+        TOUCH_DEBUG_ENABLED = false;
+        Serial.println( "TOUCH_DEBUG_DISABLED");        
+        
+        GPIO_HEADER_RANGING = false;
+        Serial.println("GPIO_HEADER_RANGING_DISABLED");        
+        
+        BT_LOGGING_ENABLED = false;
+        Serial.println("BT_LOGGING_DISABLED");
+        
+        LOGGING_FORMAT=LOGGING_FORMAT_EXPONENT;
+        eeprom_LOGGINGFORMAT.write(LOGGING_FORMAT);        
+        Serial.println("LOGGING_FORMAT_EXPONENT");
+        
+        ADC_SAMPLING_SPEED=ADC_SAMPLING_SPEED_AVG;
+        eeprom_ADCSAMPLINGSPEED.write(ADC_SAMPLING_SPEED);
+        refreshADCSamplingSpeed();                
+        Serial.println("ADC_SAMPLING_SPEED_AVG");
+        
+        autooff_interval = AUTOOFF_DEFAULT;
+        eeprom_AUTOFF.write(autooff_interval);       
+        Serial.println("AUTOOFF_DEFAULT"); 
+
+        TOUCH_DEBUG_ENABLED = false;
+        Serial.println("TOUCH_DEBUG_DISABLED");        
+
+        if (LPF)  toggleLPF();
+        if (BIAS) toggleOffset();
+        if (AUTORANGE) toggleAutoranging();
+        rangeMA();
+        
+        Serial.println("SETTINGS_RESET");
+
+        break;
+      
       case '?':
         printSerialMenu();
         break;
@@ -863,6 +906,7 @@ void printSerialMenu() {
   Serial.println("4 = toggle Low Pass Filter (LPF)");
   Serial.println("5 = toggle BIAS (disables AutoRanging)");
   Serial.println("6 = toggle AutoRanging (disables BIAS)");
+  Serial.println("! = reset all runtime settings to defaults");  
   Serial.println("? = Print this menu and calib info");
   Serial.println();
 }
