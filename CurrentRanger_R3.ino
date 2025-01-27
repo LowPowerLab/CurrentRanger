@@ -564,11 +564,17 @@ void loop() {
 
     if (autoffBuzz) u8g2.drawStr(5,26,"* AUTO OFF! *"); //autoffWarning
     u8g2.setFont(u8g2_font_helvB24_te);
-    u8g2.setCursor(RANGE_MA ? 102 : 106, RANGE_UA ? 55:60); u8g2.print(RANGE_UA ? char('µ') : rangeUnit);
+    u8g2.setCursor(RANGE_MA ? 102 : 106, RANGE_UA ? 55:60); u8g2.print(RANGE_UA ? char(u'µ') : rangeUnit);
     u8g2.setFont(u8g2_font_logisoso32_tr);
-    u8g2.setCursor(0,64); u8g2.print((BIAS&&abs(VOUT)>=0.4||!BIAS&&VOUT>=0.4)?VOUT:0, abs(VOUT)>=1000?0:1);
-    if (!BIAS && readDiff>ADC_OVERLOAD || BIAS && abs(readDiff)>ADC_OVERLOAD/2)
-    {
+    u8g2.setCursor(0,64);
+    u8g2.print(
+      ( (BIAS && (abs(VOUT)>=0.4)) || (!BIAS&&(VOUT>=0.4)) )? VOUT:0 , 
+      (abs(VOUT)>=1000)?0:1 
+    );
+    if (
+      (!BIAS && (readDiff>ADC_OVERLOAD)) || 
+      (BIAS && (abs(readDiff)>ADC_OVERLOAD/2))
+    ) {
       u8g2.setFont(u8g2_font_9x15B_tf);
       u8g2.drawStr(0,28, "OVERLOAD!");
     }
