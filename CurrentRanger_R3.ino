@@ -19,11 +19,12 @@
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
 //#include <ATSAMD21_ADC.h>
 
-#define FW_VERSION "1.1.4"         //firmware version
+#define FW_VERSION "1.1.5"         //firmware version
 // ********************** CHANGE LOG ***********************************************************************
-// 1.1.4 - BUGFIX - USB logging values are half value when CR started without OLED, and until AUTORANGING is toggled
-// 1.1.3 - BUGFIX - CR turns off after 21hrs when AUTO-OFF disabled
-// 1.1.2 - BUGFIX - BIAS MODE bug fix
+// 1.1.5 - FEATURE - NEw USB UI command to reset runtimes settings to default values
+// 1.1.4 - BUGFIX  - USB logging values are half value when CR started without OLED, and until AUTORANGING is toggled
+// 1.1.3 - BUGFIX  - CR turns off after 21hrs when AUTO-OFF disabled
+// 1.1.2 - BUGFIX  - BIAS MODE bug fix
 //***********************************************************************************************************
 #define BIAS_LED       11
 #define LPFPIN         4
