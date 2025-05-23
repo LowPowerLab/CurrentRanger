@@ -399,6 +399,11 @@ void loop() {
         eeprom_ADCSAMPLINGSPEED.write(ADC_SAMPLING_SPEED);
         refreshADCSamplingSpeed();
         break;
+      case 'S':
+        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_AVG) Serial.println("ADC_SAMPLING_SPEED_AVG"); else
+        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_FAST) Serial.println("ADC_SAMPLING_SPEED_FAST"); else
+        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_SLOW) Serial.println("ADC_SAMPLING_SPEED_SLOW");
+        break;
       case 'a': //toggle autoOff function
         if (autooff_interval == AUTOOFF_DEFAULT)
         {
@@ -884,6 +889,7 @@ void printSerialMenu() {
   Serial.println("g = toggle GPIO range indication (SCK=mA,MISO=uA,MOSI=nA)");
   Serial.println("r = reboot into bootloader");
   Serial.println("s = cycle ADC sampling speeds (0=average,faster,slower)");
+  Serial.println("S = show current ADC sampling speed");
   Serial.println("t = toggle touchpad serial output debug info");
   Serial.println("u = toggle USB/serial logging");
   Serial.println("< = Calibrate LDO value (-1mV)");
