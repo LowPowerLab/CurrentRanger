@@ -356,9 +356,6 @@ void loop() {
         USB_LOGGING_ENABLED =! USB_LOGGING_ENABLED;
         Serial.println(USB_LOGGING_ENABLED ? "USB_LOGGING_ENABLED" : "USB_LOGGING_DISABLED");
         break;
-      case 'U': //print the USB logging status
-        Serial.println(USB_LOGGING_ENABLED ? "USB_LOGGING_ENABLED" : "USB_LOGGING_DISABLED");
-        break;
       case 't': //toggle touchpad serial output debug info
         TOUCH_DEBUG_ENABLED =! TOUCH_DEBUG_ENABLED;
         Serial.println(TOUCH_DEBUG_ENABLED ? "TOUCH_DEBUG_ENABLED" : "TOUCH_DEBUG_DISABLED");
@@ -889,7 +886,6 @@ void printSerialMenu() {
   Serial.println("s = cycle ADC sampling speeds (0=average,faster,slower)");
   Serial.println("t = toggle touchpad serial output debug info");
   Serial.println("u = toggle USB/serial logging");
-  Serial.println("U = show USB/serial logging state");
   Serial.println("< = Calibrate LDO value (-1mV)");
   Serial.println("> = Calibrate LDO value (+1mV)");
   Serial.println("+ = Calibrate GAIN value (+1)");
