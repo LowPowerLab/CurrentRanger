@@ -331,7 +331,7 @@ void loop() {
         Serial.print("new offsetCorrectionValue = ");
         Serial.println(offsetCorrectionValue);
         break;
-      case '/':
+      case '&':
         eeprom_ADCoffset.write(--offsetCorrectionValue);
         analogReadCorrection(offsetCorrectionValue,gainCorrectionValue);
         Serial.print("new offsetCorrectionValue = ");
@@ -457,6 +457,8 @@ void loop() {
 
         break;
       case '?':
+      //print the menu on / or ?
+      case '/':
         printSerialMenu();
         break;
       default: break;
@@ -891,7 +893,7 @@ void printSerialMenu() {
   Serial.println("+ = Calibrate GAIN value (+1)");
   Serial.println("- = Calibrate GAIN value (-1)");
   Serial.println("* = Calibrate OFFSET value (+1)");
-  Serial.println("/ = Calibrate OFFSET value (-1)");
+  Serial.println("& = Calibrate OFFSET value (-1)");
   Serial.println("1 = range to MilliAmps (MA)");
   Serial.println("2 = range to MicroAmps (UA)");
   Serial.println("3 = range to NanoAmps (NA)");
