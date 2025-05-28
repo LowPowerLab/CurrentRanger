@@ -19,8 +19,9 @@
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
 //#include <ATSAMD21_ADC.h>
 
-#define FW_VERSION "1.1.5"         //firmware version
+#define FW_VERSION "1.1.6"         //firmware version
 // ********************** CHANGE LOG ***********************************************************************
+// 1.1.6 - ignore repeated commands for '?'
 // 1.1.5 - FEATURE - NEw USB UI command to reset runtimes settings to default values
 // 1.1.4 - BUGFIX - USB logging values are half value when CR started without OLED, and until AUTORANGING is toggled
 // 1.1.3 - BUGFIX - CR turns off after 21hrs when AUTO-OFF disabled
@@ -356,6 +357,9 @@ void loop() {
         USB_LOGGING_ENABLED =! USB_LOGGING_ENABLED;
         Serial.println(USB_LOGGING_ENABLED ? "USB_LOGGING_ENABLED" : "USB_LOGGING_DISABLED");
         break;
+      case 'U': //print the USB logging status
+        Serial.println(USB_LOGGING_ENABLED ? "USB_LOGGING_ENABLED" : "USB_LOGGING_DISABLED");
+        break;
       case 't': //toggle touchpad serial output debug info
         TOUCH_DEBUG_ENABLED =! TOUCH_DEBUG_ENABLED;
         Serial.println(TOUCH_DEBUG_ENABLED ? "TOUCH_DEBUG_ENABLED" : "TOUCH_DEBUG_DISABLED");
@@ -398,6 +402,11 @@ void loop() {
         if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_SLOW) Serial.println("ADC_SAMPLING_SPEED_SLOW");
         eeprom_ADCSAMPLINGSPEED.write(ADC_SAMPLING_SPEED);
         refreshADCSamplingSpeed();
+        break;
+      case 'S':
+        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_AVG) Serial.println("ADC_SAMPLING_SPEED_AVG"); else
+        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_FAST) Serial.println("ADC_SAMPLING_SPEED_FAST"); else
+        if (ADC_SAMPLING_SPEED==ADC_SAMPLING_SPEED_SLOW) Serial.println("ADC_SAMPLING_SPEED_SLOW");
         break;
       case 'a': //toggle autoOff function
         if (autooff_interval == AUTOOFF_DEFAULT)
@@ -457,6 +466,7 @@ void loop() {
 
         break;
       case '?':
+        while (Serial.peek()=='?') inByte = Serial.read(); //flush repeated '?'
         printSerialMenu();
         break;
       default: break;
@@ -884,8 +894,10 @@ void printSerialMenu() {
   Serial.println("g = toggle GPIO range indication (SCK=mA,MISO=uA,MOSI=nA)");
   Serial.println("r = reboot into bootloader");
   Serial.println("s = cycle ADC sampling speeds (0=average,faster,slower)");
+  Serial.println("S = show current ADC sampling speed");
   Serial.println("t = toggle touchpad serial output debug info");
   Serial.println("u = toggle USB/serial logging");
+  Serial.println("U = show USB/serial logging state");
   Serial.println("< = Calibrate LDO value (-1mV)");
   Serial.println("> = Calibrate LDO value (+1mV)");
   Serial.println("+ = Calibrate GAIN value (+1)");
