@@ -19,8 +19,9 @@
 #include <U8g2lib.h>               //https://github.com/olikraus/u8g2/wiki/u8g2reference fonts:https://github.com/olikraus/u8g2/wiki/fntlistall
 //#include <ATSAMD21_ADC.h>
 
-#define FW_VERSION "1.1.6"         //firmware version
+#define FW_VERSION "1.1.7"         //firmware version
 // ********************** CHANGE LOG ***********************************************************************
+// 1.1.7 - adjust ADC_OVERLOAD threshold to 3850, OLED writings
 // 1.1.6 - ignore repeated commands for '?'
 // 1.1.5 - FEATURE - NEw USB UI command to reset runtimes settings to default values
 // 1.1.4 - BUGFIX - USB logging values are half value when CR started without OLED, and until AUTORANGING is toggled
@@ -60,7 +61,7 @@
 #define DAC_GND_ISO_OFFSET     10
 #define DAC_HALF_SUPPLY_OFFSET 512
 #define OUTPUT_CALIB_FACTOR    1.00  //calibrate final VOUT value
-#define ADC_OVERLOAD           3900  //assuming GNDISO DAC output is very close to 0, this is max value less ground offset (varies from unit to unit, 3900 is a safe value)
+#define ADC_OVERLOAD           3850  //assuming GNDISO DAC output is very close to 0, this is max value less ground offset (varies from unit to unit, 3900 is a safe value)
 //***********************************************************************************************************
 //#define ADC_CALIBRATE_FORCED
 #define ADC_CALIBRATE_FORCED_OFFSET 0
@@ -235,18 +236,17 @@ void setup() {
     //               - offset is 12bit 2s complement format (DS p896)
   }
 
-  if (OLED_found)
-  {
+  if (OLED_found) {
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_8x13B_tf);
     u8g2.setCursor(15,10); u8g2.print("CurrentRanger");  
     u8g2.setFont(u8g2_font_6x12_tf);
-    u8g2.setCursor(0,20); u8g2.print("Offset:");
-    u8g2.setCursor(64,20); u8g2.print(offsetCorrectionValue);
-    u8g2.setCursor(0,32); u8g2.print("Gain  :");
-    u8g2.setCursor(64,32); u8g2.print(gainCorrectionValue);
-    u8g2.setCursor(0,44); u8g2.print("LDO   :");
-    u8g2.setCursor(64,44); u8g2.print(ldoValue,3);
+    u8g2.setCursor(0,24); u8g2.print("Offset:");
+    u8g2.setCursor(64,24); u8g2.print(offsetCorrectionValue);
+    u8g2.setCursor(0,35); u8g2.print("Gain  :");
+    u8g2.setCursor(64,35); u8g2.print(gainCorrectionValue);
+    u8g2.setCursor(0,45); u8g2.print("LDO   :");
+    u8g2.setCursor(64,45); u8g2.print(ldoValue,3);
     u8g2.setCursor(0, 56); u8g2.print("Firmware:");
     u8g2.setCursor(64,56); u8g2.print(FW_VERSION);
     u8g2.sendBuffer();
@@ -260,10 +260,8 @@ void setup() {
   SerialBT.begin(SERIAL_UART_BAUD);
   SerialBT.print("AT"); //assuming HC-06, no line ending required
   uint32_t timer=millis();
-  while(millis()-timer<1000) //about 1s to respond
-  {
-    if (SerialBT.available()==2 && SerialBT.read()=='O' && SerialBT.read()=='K')
-    {
+  while(millis()-timer<1000) { //about 1s to respond
+    if (SerialBT.available()==2 && SerialBT.read()=='O' && SerialBT.read()=='K') {
       BT_found=true;
       break;
     }
@@ -271,19 +269,15 @@ void setup() {
 
   Serial.print(BT_found?"OK!":"No HC-06 response.\r\nChecking for BT v3.0...");
 
-  if (!BT_found)
-  {
+  if (!BT_found) {
     SerialBT.print("\r\n"); //assuming HC-06 version 3.0 that requires line ending
     uint32_t timer=millis();
-    while(millis()-timer<50) //about 50ms to respond
-    {
-      if (SerialBT.available()==4 && SerialBT.read()=='O' && SerialBT.read()=='K' && SerialBT.read()=='\r' && SerialBT.read() == '\n')
-      {
+    while(millis()-timer<50) { //about 50ms to respond
+      if (SerialBT.available()==4 && SerialBT.read()=='O' && SerialBT.read()=='K' && SerialBT.read()=='\r' && SerialBT.read() == '\n') {
         BT_found=true;
         break;
       }
     }
-
     Serial.println(BT_found?"OK!":"No response.");
   }
 
@@ -476,13 +470,10 @@ void loop() {
   if (AUTORANGE) {
     readVOUT();
     //assumes we only auto-range in DC mode (no bias)
-    if (readDiff <= RANGE_SWITCH_THRESHOLD_LOW)
-    {
+    if (readDiff <= RANGE_SWITCH_THRESHOLD_LOW) {
       if      (RANGE_MA) { rangeUA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_DOWN); }
       else if (RANGE_UA) { rangeNA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_DOWN); }
-    }
-    else if (readDiff >= RANGE_SWITCH_THRESHOLD_HIGH)
-    {
+    } else if (readDiff >= RANGE_SWITCH_THRESHOLD_HIGH) {
       if      (RANGE_NA) { rangeUA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_UP); }
       else if (RANGE_UA) { rangeMA(); rangeSwitched=true; rangeBeep(SWITCHDELAY_UP); }
     }
@@ -494,8 +485,7 @@ void loop() {
   }
 
   uint8_t VOUTCalculated=false;
-  if (USB_LOGGING_ENABLED)
-  {//TODO: refactor
+  if (USB_LOGGING_ENABLED) {//TODO: refactor
     if (!AUTORANGE) readVOUT();
     VOUT = readDiff*ldoOptimized*(BIAS?1:OUTPUT_CALIB_FACTOR);
     VOUTCalculated=true;
@@ -780,13 +770,10 @@ int adcRead(byte ADCpin) {
 void readVOUT() {
   readDiff = adcRead(SENSE_OUTPUT) - adcRead(SENSE_GNDISO) + offsetCorrectionValue;
   if (!BIAS) {
-    if (!analog_ref_half && readDiff > RANGE_SWITCH_THRESHOLD_LOW && readDiff < RANGE_SWITCH_THRESHOLD_HIGH/3)
-    {
+    if (!analog_ref_half && readDiff > RANGE_SWITCH_THRESHOLD_LOW && readDiff < RANGE_SWITCH_THRESHOLD_HIGH/3) {
       analogReferenceHalf(true);
       readVOUT();
-    }
-    else if (analog_ref_half && readDiff >= RANGE_SWITCH_THRESHOLD_HIGH)
-    {
+    } else if (analog_ref_half && readDiff >= RANGE_SWITCH_THRESHOLD_HIGH) {
       analogReferenceHalf(false);
       readVOUT();
     }
